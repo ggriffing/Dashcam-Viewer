@@ -45,6 +45,7 @@ export default function DashcamViewer() {
   const playTimerRef = useRef<number | null>(null);
   const frameDurationsRef = useRef<number[]>([]);
   const firstKeyframeRef = useRef(0);
+  const currentFrameRef = useRef(0);
 
   useEffect(() => {
     const initProtobuf = async () => {
@@ -181,30 +182,36 @@ export default function DashcamViewer() {
   const handleSeek = useCallback((frame: number) => {
     handlePause();
     const clampedFrame = Math.max(0, Math.min(frame, totalFrames - 1));
+    currentFrameRef.current = clampedFrame;
     setCurrentFrame(clampedFrame);
     updateMetadata(clampedFrame);
     videoGridRef.current?.renderAllFrames(clampedFrame);
   }, [handlePause, totalFrames, updateMetadata]);
 
   useEffect(() => {
+    currentFrameRef.current = currentFrame;
+  }, [currentFrame]);
+
+  useEffect(() => {
     if (!isPlaying || totalFrames === 0) return;
 
     const playNextFrame = () => {
-      setCurrentFrame(prev => {
-        let next = prev + 1;
-        if (next >= totalFrames) {
-          next = Math.max(0, firstKeyframeRef.current);
-        }
-        updateMetadata(next);
-        videoGridRef.current?.renderAllFrames(next);
-        return next;
-      });
+      const prevFrame = currentFrameRef.current;
+      let next = prevFrame + 1;
+      if (next >= totalFrames) {
+        next = Math.max(0, firstKeyframeRef.current);
+      }
+      
+      currentFrameRef.current = next;
+      setCurrentFrame(next);
+      updateMetadata(next);
+      videoGridRef.current?.renderAllFrames(next);
 
-      const duration = frameDurationsRef.current[currentFrame] || 33.33;
+      const duration = frameDurationsRef.current[next] || 33.33;
       playTimerRef.current = window.setTimeout(playNextFrame, duration);
     };
 
-    const duration = frameDurationsRef.current[currentFrame] || 33.33;
+    const duration = frameDurationsRef.current[currentFrameRef.current] || 33.33;
     playTimerRef.current = window.setTimeout(playNextFrame, duration);
 
     return () => {
@@ -213,7 +220,7 @@ export default function DashcamViewer() {
         playTimerRef.current = null;
       }
     };
-  }, [isPlaying, totalFrames, currentFrame, updateMetadata]);
+  }, [isPlaying, totalFrames, updateMetadata]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -273,7 +280,8 @@ export default function DashcamViewer() {
       window.DashcamHelpers.deriveFieldInfo(seiType, window.DashcamHelpers.getProtobuf()?.enumFields || {}, { useSnakeCase: true })
     );
     
-    const filename = primaryFilename.replace(/\.mp4$/i, '') + '_sei.csv';
+    const baseName = primaryFilename ? primaryFilename.replace(/\.mp4$/i, '') : 'dashcam_export';
+    const filename = `${baseName}_sei.csv`;
     window.DashcamHelpers.downloadBlob(
       new Blob([csv], { type: 'text/csv' }),
       filename
@@ -324,7 +332,6 @@ export default function DashcamViewer() {
             size="sm"
             variant="ghost"
             onClick={handleClearVideos}
-            className="text-white/70 hover:text-white hover:bg-[#393C41]"
             data-testid="button-clear"
           >
             <X className="w-4 h-4 mr-2" />

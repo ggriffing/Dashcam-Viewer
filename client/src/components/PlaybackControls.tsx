@@ -62,7 +62,6 @@ export function PlaybackControls({
             variant="ghost"
             onClick={handleStepBack}
             disabled={disabled || currentFrame === 0}
-            className="text-white hover:bg-[#393C41] hover:text-white"
             data-testid="button-step-back"
           >
             <SkipBack className="w-4 h-4" />
@@ -73,7 +72,6 @@ export function PlaybackControls({
             variant="default"
             onClick={isPlaying ? onPause : onPlay}
             disabled={disabled}
-            className="bg-[#E82127] hover:bg-[#C41E22] text-white w-10 h-10"
             data-testid="button-play-pause"
           >
             {isPlaying ? (
@@ -88,7 +86,6 @@ export function PlaybackControls({
             variant="ghost"
             onClick={handleStepForward}
             disabled={disabled || currentFrame >= totalFrames - 1}
-            className="text-white hover:bg-[#393C41] hover:text-white"
             data-testid="button-step-forward"
           >
             <SkipForward className="w-4 h-4" />
@@ -130,7 +127,6 @@ export function PlaybackControls({
             variant="outline"
             onClick={onExport}
             disabled={disabled}
-            className="border-[#393C41] text-white hover:bg-[#393C41] hover:text-white"
             data-testid="button-export"
           >
             <Download className="w-4 h-4 mr-2" />
