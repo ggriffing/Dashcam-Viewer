@@ -3,6 +3,7 @@ import { VideoGrid, type VideoGridHandle } from "@/components/VideoGrid";
 import { PlaybackControls } from "@/components/PlaybackControls";
 import { TelemetryHUD } from "@/components/TelemetryHUD";
 import { DropZone } from "@/components/DropZone";
+import { VideoExportDialog } from "@/components/VideoExportDialog";
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
 import type { CameraAngle, VideoFrame, VideoConfig, SeiMetadataRaw, FieldInfo } from "@/lib/dashcam/types";
@@ -40,6 +41,7 @@ export default function DashcamViewer() {
   const [seiType, setSeiType] = useState<any>(null);
   const [seiFields, setSeiFields] = useState<FieldInfo[] | null>(null);
   const [primaryFilename, setPrimaryFilename] = useState<string>("");
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
   
   const videoGridRef = useRef<VideoGridHandle>(null);
   const playTimerRef = useRef<number | null>(null);
@@ -303,6 +305,11 @@ export default function DashcamViewer() {
     setPrimaryFilename("");
   }, [handlePause]);
 
+  const handleExportVideo = useCallback(() => {
+    handlePause();
+    setExportDialogOpen(true);
+  }, [handlePause]);
+
   return (
     <div className="h-screen flex flex-col bg-[#181818] overflow-hidden">
       <header className="flex-shrink-0 flex items-center justify-between px-4 py-3 bg-black border-b border-[#393C41]">
@@ -368,6 +375,7 @@ export default function DashcamViewer() {
               onPause={handlePause}
               onSeek={handleSeek}
               onExport={handleExportCSV}
+              onExportVideo={handleExportVideo}
               disabled={!hasVideos}
             />
 
@@ -382,6 +390,14 @@ export default function DashcamViewer() {
           </>
         )}
       </main>
+
+      <VideoExportDialog
+        open={exportDialogOpen}
+        onOpenChange={setExportDialogOpen}
+        cameras={cameras}
+        frameDurations={frameDurationsRef.current}
+        primaryFilename={primaryFilename}
+      />
     </div>
   );
 }

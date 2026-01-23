@@ -47,6 +47,15 @@ Preferred communication style: Simple, everyday language.
 4. Video frames are decoded using WebCodecs and rendered to canvas elements
 5. SEI metadata is displayed in real-time telemetry HUD overlay
 
+### Video Export Feature
+- **Export Merged Video**: Users can export selected camera angles into a single MP4 video with telemetry overlay
+- **Camera Selection**: Front camera is required; Left, Right, and Rear are optional
+- **Layout Modes**: Single, dual-horizontal, dual-vertical, or 2x2 grid based on selected cameras
+- **Fixed Grid Positions**: Front (top-left), Right (top-right), Left (bottom-left), Rear (bottom-right)
+- **Telemetry HUD**: Embedded at bottom of exported video with speed, gear, autopilot, heading, steering, blinkers, brake, accelerator, GPS coordinates, and timestamp
+- **Encoding**: Uses WebCodecs VideoEncoder API with mp4-muxer for client-side MP4 generation
+- **Browser Support**: Requires WebCodecs API (Chrome, Edge, Firefox; not Safari)
+
 ## External Dependencies
 
 ### Database
@@ -58,6 +67,7 @@ Preferred communication style: Simple, everyday language.
 - **protobuf.js**: Protocol Buffer parsing for Tesla SEI metadata format
 - **JSZip**: ZIP file extraction for dashcam archive support
 - **DashcamMP4**: Custom MP4 parser for Tesla dashcam container format
+- **mp4-muxer**: Client-side MP4 video muxing for video export feature
 
 ### UI Framework
 - **Radix UI**: Complete set of accessible, unstyled UI primitives
