@@ -1,4 +1,4 @@
-import { Play, Pause, SkipBack, SkipForward, Download } from "lucide-react";
+import { Play, Pause, SkipBack, SkipForward, Download, Film } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface PlaybackControlsProps {
@@ -11,6 +11,7 @@ interface PlaybackControlsProps {
   onPause: () => void;
   onSeek: (frame: number) => void;
   onExport?: () => void;
+  onExportVideo?: () => void;
   disabled: boolean;
 }
 
@@ -30,6 +31,7 @@ export function PlaybackControls({
   onPause,
   onSeek,
   onExport,
+  onExportVideo,
   disabled,
 }: PlaybackControlsProps) {
   const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -121,18 +123,33 @@ export function PlaybackControls({
           <span data-testid="text-duration">{formatTime(duration)}</span>
         </div>
 
-        {onExport && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={onExport}
-            disabled={disabled}
-            data-testid="button-export"
-          >
-            <Download className="w-4 h-4 mr-2" />
-            Export CSV
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {onExportVideo && (
+            <Button
+              size="sm"
+              variant="default"
+              onClick={onExportVideo}
+              disabled={disabled}
+              data-testid="button-export-video"
+            >
+              <Film className="w-4 h-4 mr-2" />
+              Export Video
+            </Button>
+          )}
+          
+          {onExport && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onExport}
+              disabled={disabled}
+              data-testid="button-export-csv"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              CSV
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );
