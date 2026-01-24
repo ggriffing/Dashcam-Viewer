@@ -347,6 +347,7 @@ export function VideoExportDialog({
 
       outputWidth = Math.floor(outputWidth / 2) * 2;
       outputHeight = Math.floor(outputHeight / 2) * 2;
+      console.log("Output dimensions:", outputWidth, "x", outputHeight);
 
       const encoderConfig = {
         codec: "avc1.42001f",
@@ -355,13 +356,18 @@ export function VideoExportDialog({
         bitrate: 4_000_000,
         framerate: 30,
       };
+      console.log("Encoder config:", encoderConfig);
 
+      console.log("Checking encoder support...");
       const support = await VideoEncoder.isConfigSupported(encoderConfig);
+      console.log("Encoder support:", support);
       if (!support.supported) {
+        console.log("Encoder not supported!");
         setStatusText("Video encoder configuration not supported by browser");
         setIsExporting(false);
         return;
       }
+      console.log("Encoder is supported, continuing...");
 
       const canvas = document.createElement("canvas");
       canvas.width = outputWidth;
