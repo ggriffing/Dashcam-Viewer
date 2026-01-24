@@ -347,12 +347,21 @@ export function VideoExportDialog({
 
       outputWidth = Math.floor(outputWidth / 2) * 2;
       outputHeight = Math.floor(outputHeight / 2) * 2;
-      console.log("Output dimensions:", outputWidth, "x", outputHeight);
+      console.log("Original output dimensions:", outputWidth, "x", outputHeight);
+
+      const maxDimension = 1920;
+      let scale = 1;
+      if (outputWidth > maxDimension || outputHeight > maxDimension) {
+        scale = Math.min(maxDimension / outputWidth, maxDimension / outputHeight);
+        outputWidth = Math.floor((outputWidth * scale) / 2) * 2;
+        outputHeight = Math.floor((outputHeight * scale) / 2) * 2;
+        console.log("Scaled to:", outputWidth, "x", outputHeight);
+      }
 
       const codecProfiles = [
-        "avc1.640032",
-        "avc1.64002a",
         "avc1.640028",
+        "avc1.64001f",
+        "avc1.42e01f",
         "avc1.42001f",
       ];
 
@@ -362,7 +371,7 @@ export function VideoExportDialog({
           codec,
           width: outputWidth,
           height: outputHeight,
-          bitrate: 8_000_000,
+          bitrate: 6_000_000,
           framerate: 30,
         };
         const support = await VideoEncoder.isConfigSupported(config);
@@ -427,6 +436,10 @@ export function VideoExportDialog({
       setStatusText("Encoding video...");
       let timestamp = 0;
 
+      const scaledSourceWidth = Math.floor(sourceWidth * scale);
+      const scaledSourceHeight = Math.floor(sourceHeight * scale);
+      const scaledHudHeight = Math.floor(hudHeight * scale);
+
       for (let i = 0; i < totalFrames; i++) {
         if (abortRef.current || encoderError) break;
 
@@ -445,26 +458,26 @@ export function VideoExportDialog({
               dy = 0;
             } else if (layoutMode === "dual-horizontal") {
               const posMap: Record<CameraAngle, number> = { front: 0, left: 0, right: 1, rear: 1 };
-              dx = posMap[camera.angle] * sourceWidth;
+              dx = posMap[camera.angle] * scaledSourceWidth;
               dy = 0;
             } else if (layoutMode === "dual-vertical") {
               const posMap: Record<CameraAngle, number> = { front: 0, left: 1, right: 1, rear: 1 };
               dx = 0;
-              dy = posMap[camera.angle] * sourceHeight;
+              dy = posMap[camera.angle] * scaledSourceHeight;
             } else {
               const pos = CAMERA_GRID_POSITIONS[camera.angle];
-              dx = pos.col * sourceWidth;
-              dy = pos.row * sourceHeight;
+              dx = pos.col * scaledSourceWidth;
+              dy = pos.row * scaledSourceHeight;
             }
 
-            ctx.drawImage(decodedFrame, dx, dy, sourceWidth, sourceHeight);
+            ctx.drawImage(decodedFrame, dx, dy, scaledSourceWidth, scaledSourceHeight);
             decodedFrame.close();
           }
         }
 
         const metadata = frontCamera.frames[i]?.sei || null;
-        const hudY = outputHeight - hudHeight;
-        drawTelemetryHUD(ctx, outputWidth, hudHeight, hudY, metadata, i, totalFrames, primaryFilename);
+        const hudY = outputHeight - scaledHudHeight;
+        drawTelemetryHUD(ctx, outputWidth, scaledHudHeight, hudY, metadata, i, totalFrames, primaryFilename);
 
         const frameDuration = frameDurations[i] || 33.33;
         
