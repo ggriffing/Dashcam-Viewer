@@ -301,11 +301,15 @@ export function VideoExportDialog({
     setIsExporting(true);
     setProgress(0);
     setStatusText("Initializing...");
+    console.log("Starting export...");
 
     try {
       const selected = getSelectedCameras();
+      console.log("Selected cameras:", selected.map(c => c.angle));
       const layoutMode = getLayoutMode();
+      console.log("Layout mode:", layoutMode);
       const totalFrames = Math.max(...selected.map(c => c.frames.length));
+      console.log("Total frames:", totalFrames);
       
       const sourceConfig = frontCamera.config!;
       const sourceWidth = sourceConfig.width;
@@ -389,16 +393,19 @@ export function VideoExportDialog({
       encoder.configure(encoderConfig);
 
       setStatusText("Decoding video frames...");
+      console.log("Starting frame decoding...");
       
       const decodedCameras: Map<CameraAngle, (VideoFrame | null)[]> = new Map();
       for (const camera of selected) {
         if (camera.config) {
+          console.log(`Decoding ${camera.frames.length} frames for ${camera.angle}...`);
           const decoded = await decodeAllFrames(camera.frames, camera.config);
           decodedCameras.set(camera.angle, decoded);
           console.log(`Decoded ${decoded.filter(f => f !== null).length}/${decoded.length} frames for ${camera.angle}`);
         }
       }
 
+      console.log("Starting encoding...");
       setStatusText("Encoding video...");
       let timestamp = 0;
 
