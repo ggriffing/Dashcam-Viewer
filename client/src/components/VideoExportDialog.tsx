@@ -31,7 +31,7 @@ interface VideoExportDialogProps {
   primaryFilename: string;
 }
 
-type LayoutMode = "single" | "dual-horizontal" | "quad";
+type LayoutMode = "single" | "dual-horizontal" | "triple-horizontal" | "quad";
 
 const GEAR_LABELS: Record<number, string> = {
   0: "P", 1: "D", 2: "R", 3: "N",
@@ -121,6 +121,7 @@ export function VideoExportDialog({
     
     if (selected.length === 1) return "single";
     if (selected.length === 2) return "dual-horizontal";
+    if (selected.length === 3) return "triple-horizontal";
     return "quad";
   }, [selectedCameras, cameras]);
 
@@ -329,6 +330,10 @@ export function VideoExportDialog({
           outputWidth = sourceWidth * 2;
           outputHeight = sourceHeight + hudHeight;
           break;
+        case "triple-horizontal":
+          outputWidth = sourceWidth * 3;
+          outputHeight = sourceHeight + hudHeight;
+          break;
         case "quad":
         default:
           outputWidth = sourceWidth * 2;
@@ -450,6 +455,10 @@ export function VideoExportDialog({
               dy = 0;
             } else if (layoutMode === "dual-horizontal") {
               dx = camera.angle === "front" ? scaledSourceWidth : 0;
+              dy = 0;
+            } else if (layoutMode === "triple-horizontal") {
+              const posMap: Record<CameraAngle, number> = { left: 0, front: 1, right: 2, rear: 1 };
+              dx = posMap[camera.angle] * scaledSourceWidth;
               dy = 0;
             } else {
               const pos = CAMERA_GRID_POSITIONS[camera.angle];
@@ -574,7 +583,8 @@ export function VideoExportDialog({
 
           <div className="text-xs text-white/50 space-y-1">
             <p>Layout: {getLayoutMode() === "single" ? "Single view" : 
-                       getLayoutMode() === "dual-horizontal" ? "Side by side" : "2x2 Grid"}</p>
+                       getLayoutMode() === "dual-horizontal" ? "Side by side" : 
+                       getLayoutMode() === "triple-horizontal" ? "3-wide row" : "2x2 Grid"}</p>
             <p>Grid positions: Front (top-left), Right (top-right), Left (bottom-left), Rear (bottom-right)</p>
           </div>
 
