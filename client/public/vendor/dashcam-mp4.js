@@ -62,6 +62,9 @@ class DashcamMP4 {
         const o = avcC.start;
         const codec = `avc1.${this.hex(this.view.getUint8(o + 1))}${this.hex(this.view.getUint8(o + 2))}${this.hex(this.view.getUint8(o + 3))}`;
 
+        // Extract raw avcC data for WebCodecs (the box content without box header)
+        const avcCData = new Uint8Array(this.buffer.slice(avcC.start, avcC.end));
+
         // Extract SPS/PPS
         let p = o + 6;
         const spsLen = this.view.getUint16(p);
@@ -93,7 +96,7 @@ class DashcamMP4 {
         this._config = {
             width: this.view.getUint16(avc1.start + 24),
             height: this.view.getUint16(avc1.start + 26),
-            codec, sps, pps, timescale, durations
+            codec, sps, pps, avcC: avcCData, timescale, durations
         };
         return this._config;
     }
