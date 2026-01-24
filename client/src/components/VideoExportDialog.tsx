@@ -583,9 +583,8 @@ export function VideoExportDialog({
 
           <div className="text-xs text-white/50 space-y-1">
             <p>Layout: {getLayoutMode() === "single" ? "Single view" : 
-                       getLayoutMode() === "dual-horizontal" ? "Side by side" : 
-                       getLayoutMode() === "triple-horizontal" ? "3-wide row" : "2x2 Grid"}</p>
-            <p>Grid positions: Front (top-left), Right (top-right), Left (bottom-left), Rear (bottom-right)</p>
+                       getLayoutMode() === "dual-horizontal" ? "Side by side (Other | Front)" : 
+                       getLayoutMode() === "triple-horizontal" ? "3-wide row (Left | Front | Right)" : "2x2 Grid"}</p>
           </div>
 
           {isExporting && (
