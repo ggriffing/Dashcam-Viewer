@@ -22,6 +22,7 @@ export interface VideoConfig {
   codec: string;
   sps: Uint8Array;
   pps: Uint8Array;
+  avcC: Uint8Array;
   timescale: number;
   durations: number[];
 }

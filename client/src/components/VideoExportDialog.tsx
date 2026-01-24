@@ -250,10 +250,7 @@ export function VideoExportDialog({
           codec: config.codec,
           codedWidth: config.width,
           codedHeight: config.height,
-          description: new Uint8Array([
-            ...Array.from(config.sps),
-            ...Array.from(config.pps),
-          ]),
+          description: config.avcC,
         });
 
         const chunk = new EncodedVideoChunk({
