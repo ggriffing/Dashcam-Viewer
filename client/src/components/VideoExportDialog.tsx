@@ -250,13 +250,25 @@ export function VideoExportDialog({
           codec: config.codec,
           codedWidth: config.width,
           codedHeight: config.height,
-          description: config.avcC,
         });
+
+        const DashcamMP4Class = (window as any).DashcamMP4;
+        const sc = new Uint8Array([0, 0, 0, 1]);
+        const data = frame.keyframe
+          ? DashcamMP4Class.concat(
+              sc,
+              frame.sps || config.sps,
+              sc,
+              frame.pps || config.pps,
+              sc,
+              frame.data
+            )
+          : DashcamMP4Class.concat(sc, frame.data);
 
         const chunk = new EncodedVideoChunk({
           type: frame.keyframe ? "key" : "delta",
           timestamp: 0,
-          data: frame.data,
+          data,
         });
 
         decoder.decode(chunk);
