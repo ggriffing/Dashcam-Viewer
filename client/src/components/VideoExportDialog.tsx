@@ -31,7 +31,7 @@ interface VideoExportDialogProps {
   primaryFilename: string;
 }
 
-type LayoutMode = "single" | "dual-horizontal" | "dual-vertical" | "quad";
+type LayoutMode = "single" | "dual-horizontal" | "quad";
 
 const GEAR_LABELS: Record<number, string> = {
   0: "P", 1: "D", 2: "R", 3: "N",
@@ -120,10 +120,7 @@ export function VideoExportDialog({
       .map(([angle]) => angle as CameraAngle);
     
     if (selected.length === 1) return "single";
-    if (selected.length === 2) {
-      if (selected.includes("left") && selected.includes("right")) return "dual-horizontal";
-      return "dual-vertical";
-    }
+    if (selected.length === 2) return "dual-horizontal";
     return "quad";
   }, [selectedCameras, cameras]);
 
@@ -334,10 +331,6 @@ export function VideoExportDialog({
           outputWidth = sourceWidth * 2;
           outputHeight = sourceHeight + hudHeight;
           break;
-        case "dual-vertical":
-          outputWidth = sourceWidth;
-          outputHeight = sourceHeight * 2 + hudHeight;
-          break;
         case "quad":
         default:
           outputWidth = sourceWidth * 2;
@@ -461,10 +454,6 @@ export function VideoExportDialog({
               const posMap: Record<CameraAngle, number> = { front: 0, left: 0, right: 1, rear: 1 };
               dx = posMap[camera.angle] * scaledSourceWidth;
               dy = 0;
-            } else if (layoutMode === "dual-vertical") {
-              const posMap: Record<CameraAngle, number> = { front: 0, left: 1, right: 1, rear: 1 };
-              dx = 0;
-              dy = posMap[camera.angle] * scaledSourceHeight;
             } else {
               const pos = CAMERA_GRID_POSITIONS[camera.angle];
               dx = pos.col * scaledSourceWidth;
@@ -588,8 +577,7 @@ export function VideoExportDialog({
 
           <div className="text-xs text-white/50 space-y-1">
             <p>Layout: {getLayoutMode() === "single" ? "Single view" : 
-                       getLayoutMode() === "dual-horizontal" ? "Side by side" :
-                       getLayoutMode() === "dual-vertical" ? "Stacked" : "2x2 Grid"}</p>
+                       getLayoutMode() === "dual-horizontal" ? "Side by side" : "2x2 Grid"}</p>
             <p>Grid positions: Front (top-left), Right (top-right), Left (bottom-left), Rear (bottom-right)</p>
           </div>
 
