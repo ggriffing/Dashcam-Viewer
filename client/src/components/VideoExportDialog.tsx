@@ -156,13 +156,13 @@ export function VideoExportDialog({
 
     const hudColor = "#00FF00";
     const hudColorDim = "rgba(0, 255, 0, 0.5)";
-    const fontSize = Math.max(14, Math.floor(hudHeight * 0.4));
-    const smallFontSize = Math.max(10, Math.floor(hudHeight * 0.25));
+    const fontSize = Math.max(28, Math.floor(hudHeight * 0.35));
+    const smallFontSize = Math.max(20, Math.floor(hudHeight * 0.2));
     
     ctx.font = `bold ${fontSize}px "SF Mono", Consolas, monospace`;
     ctx.textBaseline = "middle";
     
-    let x = 20;
+    let x = 40;
     const centerY = yOffset + hudHeight / 2;
     
     ctx.fillStyle = hudColor;
@@ -173,7 +173,7 @@ export function VideoExportDialog({
     ctx.font = `${smallFontSize}px "SF Mono", Consolas, monospace`;
     ctx.fillStyle = hudColorDim;
     ctx.fillText(" MPH", x + speedWidth, centerY);
-    x += speedWidth + 50;
+    x += speedWidth + 80;
     
     ctx.font = `bold ${fontSize}px "SF Mono", Consolas, monospace`;
     ctx.fillStyle = hudColor;
@@ -321,7 +321,7 @@ export function VideoExportDialog({
         return;
       }
 
-      const hudHeight = 60;
+      const hudHeight = 120;
       let outputWidth: number;
       let outputHeight: number;
 
