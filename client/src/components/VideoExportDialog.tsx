@@ -451,8 +451,7 @@ export function VideoExportDialog({
               dx = 0;
               dy = 0;
             } else if (layoutMode === "dual-horizontal") {
-              const posMap: Record<CameraAngle, number> = { front: 0, left: 0, right: 1, rear: 1 };
-              dx = posMap[camera.angle] * scaledSourceWidth;
+              dx = camera.angle === "front" ? 0 : scaledSourceWidth;
               dy = 0;
             } else {
               const pos = CAMERA_GRID_POSITIONS[camera.angle];
