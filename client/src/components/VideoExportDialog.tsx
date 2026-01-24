@@ -176,45 +176,49 @@ export function VideoExportDialog({
     ctx.fillStyle = hudColor;
     const gear = metadata?.gearState !== undefined ? GEAR_LABELS[metadata.gearState] || "--" : "--";
     ctx.fillText(gear, x, centerY);
-    x += 35;
+    x += ctx.measureText(gear).width + 15;
     
     const autopilot = metadata?.autopilotState !== undefined ? AUTOPILOT_LABELS[metadata.autopilotState] || "OFF" : "OFF";
     const isAutopilotActive = metadata?.autopilotState !== undefined && metadata.autopilotState > 0;
     ctx.font = `${smallFontSize}px "SF Mono", Consolas, monospace`;
     ctx.fillStyle = isAutopilotActive ? "#60A5FA" : hudColorDim;
     ctx.fillText(autopilot, x, centerY);
-    x += 70;
+    x += ctx.measureText(autopilot).width + 15;
     
+    const headingText = formatHeading(metadata?.headingDeg);
     ctx.fillStyle = hudColor;
-    ctx.fillText(formatHeading(metadata?.headingDeg), x, centerY);
-    x += 70;
+    ctx.fillText(headingText, x, centerY);
+    x += ctx.measureText(headingText).width + 10;
     
-    ctx.fillText(formatSteeringAngle(metadata?.steeringWheelAngle), x, centerY);
-    x += 70;
+    const steeringText = formatSteeringAngle(metadata?.steeringWheelAngle);
+    ctx.fillText(steeringText, x, centerY);
+    x += ctx.measureText(steeringText).width + 10;
     
     const brakeActive = metadata?.brakeApplied;
     ctx.fillStyle = brakeActive ? "#EF4444" : hudColorDim;
     ctx.fillText("BRK", x, centerY);
-    x += 40;
+    x += ctx.measureText("BRK").width + 5;
     
     ctx.fillStyle = metadata?.blinkerOnLeft ? "#FBBF24" : hudColorDim;
     ctx.fillText("L", x, centerY);
-    x += 20;
+    x += ctx.measureText("L").width + 5;
     
     ctx.fillStyle = metadata?.blinkerOnRight ? "#FBBF24" : hudColorDim;
     ctx.fillText("R", x, centerY);
-    x += 30;
+    x += ctx.measureText("R").width + 10;
     
+    const accelText = `ACCEL ${formatAccelerator(metadata?.acceleratorPedalPosition)}`;
     ctx.fillStyle = hudColor;
-    ctx.fillText(`ACCEL ${formatAccelerator(metadata?.acceleratorPedalPosition)}`, x, centerY);
-    x += 90;
+    ctx.fillText(accelText, x, centerY);
+    x += ctx.measureText(accelText).width + 15;
     
+    const gpsText = `${formatCoordinate(metadata?.latitudeDeg, true)} ${formatCoordinate(metadata?.longitudeDeg, false)}`;
     ctx.fillStyle = hudColor;
-    ctx.fillText(`${formatCoordinate(metadata?.latitudeDeg, true)} ${formatCoordinate(metadata?.longitudeDeg, false)}`, x, centerY);
+    ctx.fillText(gpsText, x, centerY);
     
     ctx.textAlign = "right";
     ctx.fillStyle = hudColor;
-    const timeText = `${formatTime(frameIndex, frameDurations)} | Frame ${frameIndex + 1}/${totalFrames}`;
+    const timeText = `${formatTime(frameIndex, frameDurations)} | ${frameIndex + 1}/${totalFrames}`;
     ctx.fillText(timeText, width - 20, centerY);
     
     if (filename) {
@@ -451,7 +455,7 @@ export function VideoExportDialog({
               dx = 0;
               dy = 0;
             } else if (layoutMode === "dual-horizontal") {
-              dx = camera.angle === "front" ? 0 : scaledSourceWidth;
+              dx = camera.angle === "front" ? scaledSourceWidth : 0;
               dy = 0;
             } else {
               const pos = CAMERA_GRID_POSITIONS[camera.angle];
