@@ -221,12 +221,6 @@ export function VideoExportDialog({
     const timeText = `${formatTime(frameIndex, frameDurations)} | ${frameIndex + 1}/${totalFrames}`;
     ctx.fillText(timeText, width - 20, centerY);
     
-    if (filename) {
-      ctx.font = `${smallFontSize - 2}px "SF Mono", Consolas, monospace`;
-      ctx.fillStyle = hudColorDim;
-      const displayName = filename.length > 30 ? "..." + filename.slice(-27) : filename;
-      ctx.fillText(displayName, width - 20, yOffset + hudHeight - 10);
-    }
     
     ctx.textAlign = "left";
   }, [frameDurations]);
