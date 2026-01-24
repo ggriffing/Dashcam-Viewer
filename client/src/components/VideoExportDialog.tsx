@@ -327,6 +327,24 @@ export function VideoExportDialog({
           break;
       }
 
+      outputWidth = Math.floor(outputWidth / 2) * 2;
+      outputHeight = Math.floor(outputHeight / 2) * 2;
+
+      const encoderConfig = {
+        codec: "avc1.42001f",
+        width: outputWidth,
+        height: outputHeight,
+        bitrate: 4_000_000,
+        framerate: 30,
+      };
+
+      const support = await VideoEncoder.isConfigSupported(encoderConfig);
+      if (!support.supported) {
+        setStatusText("Video encoder configuration not supported by browser");
+        setIsExporting(false);
+        return;
+      }
+
       const canvas = document.createElement("canvas");
       canvas.width = outputWidth;
       canvas.height = outputHeight;
@@ -343,26 +361,24 @@ export function VideoExportDialog({
         fastStart: "in-memory",
       });
 
+      let encoderError: Error | null = null;
       const encoder = new VideoEncoder({
         output: (chunk, meta) => {
           muxer.addVideoChunk(chunk, meta);
         },
-        error: (e) => console.error("Encoder error:", e),
+        error: (e) => {
+          console.error("Encoder error:", e);
+          encoderError = e;
+        },
       });
 
-      encoder.configure({
-        codec: "avc1.640028",
-        width: outputWidth,
-        height: outputHeight,
-        bitrate: 8_000_000,
-        framerate: 30,
-      });
+      encoder.configure(encoderConfig);
 
       setStatusText("Encoding frames...");
       let timestamp = 0;
 
       for (let i = 0; i < totalFrames; i++) {
-        if (abortRef.current) break;
+        if (abortRef.current || encoderError) break;
 
         ctx.fillStyle = "#181818";
         ctx.fillRect(0, 0, outputWidth, outputHeight);
@@ -419,6 +435,14 @@ export function VideoExportDialog({
 
         timestamp += frameDuration;
         setProgress(Math.round((i / totalFrames) * 100));
+
+        while (encoder.encodeQueueSize > 5) {
+          await new Promise(r => setTimeout(r, 10));
+        }
+      }
+
+      if (encoderError) {
+        throw encoderError;
       }
 
       setStatusText("Finalizing...");
