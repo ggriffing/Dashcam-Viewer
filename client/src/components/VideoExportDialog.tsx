@@ -457,8 +457,14 @@ export function VideoExportDialog({
               dx = camera.angle === "front" ? scaledSourceWidth : 0;
               dy = 0;
             } else if (layoutMode === "triple-horizontal") {
-              const posMap: Record<CameraAngle, number> = { left: 0, front: 1, right: 2, rear: 1 };
-              dx = posMap[camera.angle] * scaledSourceWidth;
+              // Dynamically assign positions based on which cameras are selected
+              const selectedAngles = selected.map((c: CameraData) => c.angle);
+              // Order preference: left, front, right, rear
+              const orderedAngles: CameraAngle[] = ["left", "front", "right", "rear"];
+              const sortedAngles = selectedAngles.slice().sort((a: CameraAngle, b: CameraAngle) => 
+                orderedAngles.indexOf(a) - orderedAngles.indexOf(b)
+              );
+              dx = sortedAngles.indexOf(camera.angle) * scaledSourceWidth;
               dy = 0;
             } else {
               const pos = CAMERA_GRID_POSITIONS[camera.angle];
@@ -584,7 +590,7 @@ export function VideoExportDialog({
           <div className="text-xs text-white/50 space-y-1">
             <p>Layout: {getLayoutMode() === "single" ? "Single view" : 
                        getLayoutMode() === "dual-horizontal" ? "Side by side (Other | Front)" : 
-                       getLayoutMode() === "triple-horizontal" ? "3-wide row (Left | Front | Right)" : "2x2 Grid"}</p>
+                       getLayoutMode() === "triple-horizontal" ? "3-wide horizontal row" : "2x2 Grid"}</p>
           </div>
 
           {isExporting && (
