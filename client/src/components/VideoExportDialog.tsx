@@ -349,25 +349,37 @@ export function VideoExportDialog({
       outputHeight = Math.floor(outputHeight / 2) * 2;
       console.log("Output dimensions:", outputWidth, "x", outputHeight);
 
-      const encoderConfig = {
-        codec: "avc1.42001f",
-        width: outputWidth,
-        height: outputHeight,
-        bitrate: 4_000_000,
-        framerate: 30,
-      };
-      console.log("Encoder config:", encoderConfig);
+      const codecProfiles = [
+        "avc1.640032",
+        "avc1.64002a",
+        "avc1.640028",
+        "avc1.42001f",
+      ];
 
-      console.log("Checking encoder support...");
-      const support = await VideoEncoder.isConfigSupported(encoderConfig);
-      console.log("Encoder support:", support);
-      if (!support.supported) {
-        console.log("Encoder not supported!");
-        setStatusText("Video encoder configuration not supported by browser");
+      let encoderConfig: VideoEncoderConfig | null = null;
+      for (const codec of codecProfiles) {
+        const config = {
+          codec,
+          width: outputWidth,
+          height: outputHeight,
+          bitrate: 8_000_000,
+          framerate: 30,
+        };
+        const support = await VideoEncoder.isConfigSupported(config);
+        console.log(`Testing codec ${codec}:`, support.supported);
+        if (support.supported) {
+          encoderConfig = config;
+          break;
+        }
+      }
+
+      if (!encoderConfig) {
+        console.log("No supported encoder found!");
+        setStatusText("Video encoding not supported for this resolution");
         setIsExporting(false);
         return;
       }
-      console.log("Encoder is supported, continuing...");
+      console.log("Using encoder config:", encoderConfig);
 
       const canvas = document.createElement("canvas");
       canvas.width = outputWidth;
