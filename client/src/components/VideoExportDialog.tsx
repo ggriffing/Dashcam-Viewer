@@ -230,18 +230,24 @@ export function VideoExportDialog({
     ctx.textAlign = "left";
   }, [frameDurations]);
 
-  const decodeFrame = useCallback(async (
-    frame: DashcamVideoFrame,
+  const decodeAllFrames = useCallback(async (
+    frames: DashcamVideoFrame[],
     config: VideoConfig
-  ): Promise<VideoFrame | null> => {
+  ): Promise<(VideoFrame | null)[]> => {
+    const results: (VideoFrame | null)[] = new Array(frames.length).fill(null);
+    const DashcamMP4Class = (window as any).DashcamMP4;
+    const sc = new Uint8Array([0, 0, 0, 1]);
+    
     return new Promise((resolve) => {
+      let outputIndex = 0;
+      
       const decoder = new VideoDecoder({
         output: (videoFrame: VideoFrame) => {
-          resolve(videoFrame);
+          results[outputIndex] = videoFrame;
+          outputIndex++;
         },
         error: (e) => {
           console.error("Decoder error:", e);
-          resolve(null);
         },
       });
 
@@ -252,30 +258,38 @@ export function VideoExportDialog({
           codedHeight: config.height,
         });
 
-        const DashcamMP4Class = (window as any).DashcamMP4;
-        const sc = new Uint8Array([0, 0, 0, 1]);
-        const data = frame.keyframe
-          ? DashcamMP4Class.concat(
-              sc,
-              frame.sps || config.sps,
-              sc,
-              frame.pps || config.pps,
-              sc,
-              frame.data
-            )
-          : DashcamMP4Class.concat(sc, frame.data);
+        for (let i = 0; i < frames.length; i++) {
+          const frame = frames[i];
+          const data = frame.keyframe
+            ? DashcamMP4Class.concat(
+                sc,
+                frame.sps || config.sps,
+                sc,
+                frame.pps || config.pps,
+                sc,
+                frame.data
+              )
+            : DashcamMP4Class.concat(sc, frame.data);
 
-        const chunk = new EncodedVideoChunk({
-          type: frame.keyframe ? "key" : "delta",
-          timestamp: 0,
-          data,
+          const chunk = new EncodedVideoChunk({
+            type: frame.keyframe ? "key" : "delta",
+            timestamp: i * 33333,
+            data,
+          });
+
+          decoder.decode(chunk);
+        }
+
+        decoder.flush().then(() => {
+          decoder.close();
+          resolve(results);
+        }).catch(() => {
+          decoder.close();
+          resolve(results);
         });
-
-        decoder.decode(chunk);
-        decoder.flush().then(() => decoder.close());
       } catch (e) {
-        console.error("Failed to decode frame:", e);
-        resolve(null);
+        console.error("Failed to decode frames:", e);
+        resolve(results);
       }
     });
   }, []);
@@ -374,7 +388,18 @@ export function VideoExportDialog({
 
       encoder.configure(encoderConfig);
 
-      setStatusText("Encoding frames...");
+      setStatusText("Decoding video frames...");
+      
+      const decodedCameras: Map<CameraAngle, (VideoFrame | null)[]> = new Map();
+      for (const camera of selected) {
+        if (camera.config) {
+          const decoded = await decodeAllFrames(camera.frames, camera.config);
+          decodedCameras.set(camera.angle, decoded);
+          console.log(`Decoded ${decoded.filter(f => f !== null).length}/${decoded.length} frames for ${camera.angle}`);
+        }
+      }
+
+      setStatusText("Encoding video...");
       let timestamp = 0;
 
       for (let i = 0; i < totalFrames; i++) {
@@ -384,38 +409,31 @@ export function VideoExportDialog({
         ctx.fillRect(0, 0, outputWidth, outputHeight);
 
         for (const camera of selected) {
-          const frame = camera.frames[i];
-          const config = camera.config;
+          const decodedFrames = decodedCameras.get(camera.angle);
+          const decodedFrame = decodedFrames?.[i];
           
-          if (frame && config) {
-            try {
-              const decodedFrame = await decodeFrame(frame, config);
-              if (decodedFrame) {
-                let dx: number, dy: number;
-                
-                if (layoutMode === "single") {
-                  dx = 0;
-                  dy = 0;
-                } else if (layoutMode === "dual-horizontal") {
-                  const posMap: Record<CameraAngle, number> = { front: 0, left: 0, right: 1, rear: 1 };
-                  dx = posMap[camera.angle] * sourceWidth;
-                  dy = 0;
-                } else if (layoutMode === "dual-vertical") {
-                  const posMap: Record<CameraAngle, number> = { front: 0, left: 1, right: 1, rear: 1 };
-                  dx = 0;
-                  dy = posMap[camera.angle] * sourceHeight;
-                } else {
-                  const pos = CAMERA_GRID_POSITIONS[camera.angle];
-                  dx = pos.col * sourceWidth;
-                  dy = pos.row * sourceHeight;
-                }
-
-                ctx.drawImage(decodedFrame, dx, dy, sourceWidth, sourceHeight);
-                decodedFrame.close();
-              }
-            } catch (e) {
-              console.error(`Failed to process frame ${i} for ${camera.angle}:`, e);
+          if (decodedFrame) {
+            let dx: number, dy: number;
+            
+            if (layoutMode === "single") {
+              dx = 0;
+              dy = 0;
+            } else if (layoutMode === "dual-horizontal") {
+              const posMap: Record<CameraAngle, number> = { front: 0, left: 0, right: 1, rear: 1 };
+              dx = posMap[camera.angle] * sourceWidth;
+              dy = 0;
+            } else if (layoutMode === "dual-vertical") {
+              const posMap: Record<CameraAngle, number> = { front: 0, left: 1, right: 1, rear: 1 };
+              dx = 0;
+              dy = posMap[camera.angle] * sourceHeight;
+            } else {
+              const pos = CAMERA_GRID_POSITIONS[camera.angle];
+              dx = pos.col * sourceWidth;
+              dy = pos.row * sourceHeight;
             }
+
+            ctx.drawImage(decodedFrame, dx, dy, sourceWidth, sourceHeight);
+            decodedFrame.close();
           }
         }
 
@@ -471,7 +489,7 @@ export function VideoExportDialog({
       setStatusText(`Export failed: ${e instanceof Error ? e.message : "Unknown error"}`);
       setIsExporting(false);
     }
-  }, [frontCamera, getSelectedCameras, getLayoutMode, frameDurations, drawTelemetryHUD, decodeFrame, primaryFilename, onOpenChange]);
+  }, [frontCamera, getSelectedCameras, getLayoutMode, frameDurations, drawTelemetryHUD, decodeAllFrames, primaryFilename, onOpenChange]);
 
   const handleCancel = useCallback(() => {
     if (isExporting) {
