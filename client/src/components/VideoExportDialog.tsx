@@ -349,13 +349,14 @@ export function VideoExportDialog({
       outputHeight = Math.floor(outputHeight / 2) * 2;
       console.log("Original output dimensions:", outputWidth, "x", outputHeight);
 
-      const maxDimension = 1920;
+      const maxWidth = 1920;
+      const maxHeight = 1080;
       let scale = 1;
-      if (outputWidth > maxDimension || outputHeight > maxDimension) {
-        scale = Math.min(maxDimension / outputWidth, maxDimension / outputHeight);
+      if (outputWidth > maxWidth || outputHeight > maxHeight) {
+        scale = Math.min(maxWidth / outputWidth, maxHeight / outputHeight);
         outputWidth = Math.floor((outputWidth * scale) / 2) * 2;
         outputHeight = Math.floor((outputHeight * scale) / 2) * 2;
-        console.log("Scaled to:", outputWidth, "x", outputHeight);
+        console.log("Scaled to:", outputWidth, "x", outputHeight, "scale:", scale);
       }
 
       const codecProfiles = [
