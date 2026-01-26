@@ -42,7 +42,23 @@ Open the Terminal within IntelliJ (View → Tool Windows → Terminal) and run:
 npm install
 ```
 
-### 4. Configure Environment Variables
+### 4. Create PostGres database
+
+Create a new PostgreSQL database for the project:
+
+```bash
+createdb dashcam
+```
+
+### 5. Create session secret which should go in .env
+
+To generate a secure `SESSION_SECRET` on your Mac, you can run this command in your terminal:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+### 6. Configure Environment Variables
 
 Create a `.env` file in the project root:
 
@@ -59,7 +75,7 @@ SESSION_SECRET=your-secret-key-here
 
 If not using a database, the app will still work for video viewing features.
 
-### 5. Set Up Run Configuration
+### 7. Set Up Run Configuration
 
 1. Go to **Run → Edit Configurations**
 2. Click the **+** button and select **npm**
@@ -71,7 +87,7 @@ If not using a database, the app will still work for video viewing features.
    - **Package manager:** npm
 4. Click **Apply** and **OK**
 
-### 6. Run the Application
+### 8. Run the Application
 
 1. Select **Dev Server** from the run configuration dropdown
 2. Click the green **Run** button (or press Ctrl+R)

@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from "react";
+import { useRef, useCallback, forwardRef, useImperativeHandle } from "react";
 import { VideoPlayer, type VideoPlayerHandle } from "./VideoPlayer";
 import type { CameraAngle, VideoFrame, VideoConfig } from "@/lib/dashcam/types";
 
@@ -49,25 +49,23 @@ export const VideoGrid = forwardRef<VideoGridHandle, VideoGridProps>(
     const rearCamera = cameras.find(c => c.angle === "rear");
     const hasRear = rearCamera?.isActive;
 
+    // Filter to only include active cameras in the top row
+    const activeTopRowCameras = topRowAngles
+      .map(angle => cameras.find(c => c.angle === angle))
+      .filter((camera): camera is CameraData => camera?.isActive ?? false);
+
     return (
       <div 
         className="w-full h-full flex flex-col gap-1 p-1 bg-black"
         data-testid="video-grid"
       >
         <div className={`flex gap-1 ${hasRear ? 'flex-1' : 'h-full'}`}>
-          {topRowAngles.map((angle) => {
-            const camera = cameras.find(c => c.angle === angle) || {
-              angle,
-              frames: [],
-              config: null,
-              isActive: false,
-            };
-            
+          {activeTopRowCameras.map((camera) => {
             return (
               <VideoPlayer
-                key={angle}
-                ref={setPlayerRef(angle)}
-                angle={angle}
+                key={camera.angle}
+                ref={setPlayerRef(camera.angle)}
+                angle={camera.angle}
                 frames={camera.frames}
                 config={camera.config}
                 currentFrame={currentFrame}
