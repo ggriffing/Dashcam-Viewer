@@ -29,6 +29,15 @@ function chevronLeftPath(): string {
 const RIGHT_D = chevronRightPath();
 const LEFT_D = chevronLeftPath();
 
+function accelXToLitCount(ax: number): number {
+  const abs = Math.abs(ax);
+  if (abs < 1) return 1;
+  if (abs < 2) return 2;
+  if (abs < 4) return 3;
+  if (abs < 6) return 4;
+  return 5;
+}
+
 function computeState(metadata: SeiMetadataRaw): {
   state: "accel" | "brake" | "coast";
   litCount: number;
@@ -37,10 +46,10 @@ function computeState(metadata: SeiMetadataRaw): {
 
   if (ax !== undefined) {
     if (ax > 0.5) {
-      return { state: "accel", litCount: Math.min(N, Math.ceil(ax / 1.5)) };
+      return { state: "accel", litCount: accelXToLitCount(ax) };
     }
     if (ax < -0.5) {
-      return { state: "brake", litCount: Math.min(N, Math.ceil(Math.abs(ax) / 1.5)) };
+      return { state: "brake", litCount: accelXToLitCount(ax) };
     }
     return { state: "coast", litCount: 0 };
   }
@@ -55,8 +64,16 @@ function computeState(metadata: SeiMetadataRaw): {
   return { state: "coast", litCount: 0 };
 }
 
+function hasRelevantData(metadata: SeiMetadataRaw): boolean {
+  return (
+    metadata.linearAccelerationMps2X !== undefined ||
+    metadata.acceleratorPedalPosition !== undefined ||
+    metadata.brakeApplied !== undefined
+  );
+}
+
 export function EnergyFlowIndicator({ metadata }: EnergyFlowIndicatorProps) {
-  if (!metadata) return null;
+  if (!metadata || !hasRelevantData(metadata)) return null;
 
   const { state, litCount } = computeState(metadata);
 
@@ -99,8 +116,7 @@ export function EnergyFlowIndicator({ metadata }: EnergyFlowIndicatorProps) {
           width={CENTER_W - 12}
           height={6}
           rx={3}
-          fill={isCoast ? LIT : DIM}
-          style={isCoast ? { filter: GLOW } : undefined}
+          fill={DIM}
         />
 
         {Array.from({ length: N }).map((_, i) => {
@@ -120,8 +136,8 @@ export function EnergyFlowIndicator({ metadata }: EnergyFlowIndicatorProps) {
       <span
         className="text-[9px] font-mono tracking-[0.2em]"
         style={{
-          color: LIT,
-          opacity: isCoast ? 0.45 : 1,
+          color: isCoast ? DIM : LIT,
+          opacity: isCoast ? 0.6 : 1,
         }}
       >
         {label}
