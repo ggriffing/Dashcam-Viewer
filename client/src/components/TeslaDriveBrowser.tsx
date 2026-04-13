@@ -50,7 +50,7 @@ export function TeslaDriveBrowser({ onFilesSelected, isLoading }: TeslaDriveBrow
   const [driveData, setDriveData] = useState<TeslaDriveData | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(["SavedClips"]));
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [expandedEvent, setExpandedEvent] = useState<ExpandedEvent | null>(null);
   const [checkedCameras, setCheckedCameras] = useState<Set<string>>(new Set());
   const [isDragOver, setIsDragOver] = useState(false);
@@ -60,9 +60,9 @@ export function TeslaDriveBrowser({ onFilesSelected, isLoading }: TeslaDriveBrow
 
   const applyDriveData = useCallback((data: TeslaDriveData) => {
     setDriveData(data);
-    if (data.categories.length > 0) {
-      setExpandedCategories(new Set([data.categories[0].key]));
-    }
+    // Keep all categories collapsed after scanning so every folder is immediately visible.
+    // Users can expand whichever category they want.
+    setExpandedCategories(new Set());
   }, []);
 
   /**
