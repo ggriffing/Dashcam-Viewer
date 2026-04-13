@@ -1,4 +1,4 @@
-/// <reference types="@types/google.maps" />
+/// <reference types="google.maps" />
 import { useEffect, useRef, useState } from "react";
 
 export interface LatLng {
