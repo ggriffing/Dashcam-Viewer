@@ -95,9 +95,9 @@ export function AccelerationChart({ frames, currentFrame, totalFrames, onSeek }:
       if (!svgRef.current) return;
       const rect = svgRef.current.getBoundingClientRect();
       const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-      onSeek(Math.round(frac * Math.max(totalFrames - 1, 0)));
+      onSeek(Math.round(frac * Math.max(frames.length - 1, 0)));
     },
-    [totalFrames, onSeek]
+    [frames.length, onSeek]
   );
 
   const handlePointerDown = useCallback(
