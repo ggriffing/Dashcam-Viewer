@@ -6,6 +6,13 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  // Lightweight capability check — tells the client whether the server has a
+  // Maps API key configured, so the UI can show or hide the map overlay option.
+  app.get("/api/map-available", (_req, res) => {
+    const hasKey = !!(process.env.VITE_GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_API_KEY);
+    res.json({ available: hasKey });
+  });
+
   // Proxy that fetches a Google Maps Static API image server-side so the
   // browser canvas stays origin-clean for WebCodecs VideoFrame creation.
   // Accepts structured map parameters (never a caller-supplied URL).
@@ -62,7 +69,6 @@ export async function registerRoutes(
       const contentType = upstream.headers.get("content-type") || "image/png";
       const buffer = Buffer.from(await upstream.arrayBuffer());
       res.set("Content-Type", contentType);
-      res.set("Access-Control-Allow-Origin", "*");
       res.set("Cache-Control", "public, max-age=3600");
       res.send(buffer);
     } catch (err) {

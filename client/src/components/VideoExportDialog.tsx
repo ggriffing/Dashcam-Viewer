@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Muxer, ArrayBufferTarget } from "mp4-muxer";
 import {
   Dialog,
@@ -141,10 +142,11 @@ export function VideoExportDialog({
   const frontCamera = cameras.find(c => c.angle === "front" && c.isActive);
   const availableCameras = cameras.filter(c => c.isActive && c.angle !== "front");
 
-  const hasMapsApiKey = !!(
-    (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined) ||
-    (import.meta.env.VITE_GOOGLE_API_KEY as string | undefined)
-  );
+  const { data: mapAvailable } = useQuery<{ available: boolean }>({
+    queryKey: ["/api/map-available"],
+    staleTime: Infinity,
+  });
+  const hasMapsApiKey = mapAvailable?.available ?? false;
 
   const hasGpsData = useMemo(() => {
     if (!frontCamera) return false;
