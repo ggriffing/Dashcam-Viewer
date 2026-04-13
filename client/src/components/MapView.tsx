@@ -1,0 +1,164 @@
+import { useEffect, useRef, useState } from "react";
+
+export interface LatLng {
+  lat: number;
+  lng: number;
+}
+
+interface MapViewProps {
+  path: LatLng[];
+  currentIndex: number;
+}
+
+declare global {
+  interface Window {
+    __gmapsInitCallbacks?: Array<() => void>;
+    __gmapsScriptLoading?: boolean;
+    __gmapsInit?: () => void;
+  }
+}
+
+function loadGoogleMapsApi(apiKey: string): Promise<void> {
+  return new Promise((resolve) => {
+    if ((window as any).google?.maps) {
+      resolve();
+      return;
+    }
+
+    if (!window.__gmapsInitCallbacks) {
+      window.__gmapsInitCallbacks = [];
+    }
+    window.__gmapsInitCallbacks.push(resolve);
+
+    if (!window.__gmapsScriptLoading) {
+      window.__gmapsScriptLoading = true;
+      window.__gmapsInit = () => {
+        window.__gmapsInitCallbacks?.forEach((cb) => cb());
+        window.__gmapsInitCallbacks = [];
+      };
+      const script = document.createElement("script");
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=__gmapsInit`;
+      script.async = true;
+      script.defer = true;
+      document.head.appendChild(script);
+    }
+  });
+}
+
+const DARK_STYLES = [
+  { elementType: "geometry", stylers: [{ color: "#1a1f2e" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#6b7280" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#1a1f2e" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#2d3748" }] },
+  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#111827" }] },
+  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#8b9499" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#3d4f62" }] },
+  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#1a2535" }] },
+  { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#c9b47d" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#0f1923" }] },
+  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#3d5066" }] },
+  { featureType: "poi", stylers: [{ visibility: "off" }] },
+  { featureType: "transit", stylers: [{ visibility: "off" }] },
+  { featureType: "administrative", elementType: "geometry.stroke", stylers: [{ color: "#2d3748" }] },
+  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#556070" }] },
+];
+
+export function MapView({ path, currentIndex }: MapViewProps) {
+  const mapDivRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<any>(null);
+  const markerRef = useRef<any>(null);
+  const pathKeyRef = useRef<number>(0);
+  const [isReady, setIsReady] = useState(false);
+
+  const apiKey = import.meta.env.VITE_GOOGLE_API_KEY as string | undefined;
+
+  const validPath = path.filter((p) => p.lat !== 0 || p.lng !== 0);
+  const hasGps = validPath.length > 0;
+
+  useEffect(() => {
+    if (!apiKey || !hasGps) return;
+    loadGoogleMapsApi(apiKey).then(() => setIsReady(true));
+  }, [apiKey, hasGps]);
+
+  useEffect(() => {
+    if (!isReady || !mapDivRef.current || validPath.length === 0) return;
+
+    const currentPathKey = path.length;
+    if (mapRef.current && pathKeyRef.current === currentPathKey) return;
+    pathKeyRef.current = currentPathKey;
+
+    const google = (window as any).google;
+
+    const initialPos = validPath[Math.min(currentIndex, validPath.length - 1)] ?? validPath[0];
+
+    const map = new google.maps.Map(mapDivRef.current, {
+      center: initialPos,
+      zoom: 16,
+      disableDefaultUI: true,
+      zoomControl: true,
+      zoomControlOptions: {
+        position: google.maps.ControlPosition.RIGHT_BOTTOM,
+      },
+      styles: DARK_STYLES,
+    });
+
+    new google.maps.Polyline({
+      path: validPath,
+      geodesic: true,
+      strokeColor: "#4A90E2",
+      strokeOpacity: 0.9,
+      strokeWeight: 3,
+      map,
+    });
+
+    const currentPos = path[currentIndex];
+    const markerPos =
+      currentPos && (currentPos.lat !== 0 || currentPos.lng !== 0)
+        ? currentPos
+        : validPath[0];
+
+    const marker = new google.maps.Marker({
+      position: markerPos,
+      map,
+      icon: {
+        path: google.maps.SymbolPath.CIRCLE,
+        scale: 8,
+        fillColor: "#E82127",
+        fillOpacity: 1,
+        strokeColor: "#FFFFFF",
+        strokeWeight: 2,
+      },
+      zIndex: 100,
+    });
+
+    const bounds = new google.maps.LatLngBounds();
+    validPath.forEach((p: LatLng) => bounds.extend(p));
+    map.fitBounds(bounds, { top: 24, right: 24, bottom: 24, left: 24 });
+
+    mapRef.current = map;
+    markerRef.current = marker;
+  }, [isReady, path]);
+
+  useEffect(() => {
+    if (!markerRef.current || path.length === 0) return;
+    const pos = path[currentIndex];
+    if (pos && (pos.lat !== 0 || pos.lng !== 0)) {
+      markerRef.current.setPosition(pos);
+    }
+  }, [currentIndex, path]);
+
+  if (!apiKey || !hasGps) return null;
+
+  return (
+    <div
+      className="flex-shrink-0 w-full border-t border-[#393C41]"
+      style={{ height: "180px" }}
+    >
+      <div
+        ref={mapDivRef}
+        className="w-full h-full"
+        data-testid="map-view"
+      />
+    </div>
+  );
+}

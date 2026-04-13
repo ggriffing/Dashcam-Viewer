@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { VideoGrid, type VideoGridHandle } from "@/components/VideoGrid";
 import { PlaybackControls } from "@/components/PlaybackControls";
 import { TelemetryHUD } from "@/components/TelemetryHUD";
+import { MapView, type LatLng } from "@/components/MapView";
 import { DropZone } from "@/components/DropZone";
 import { VideoExportDialog } from "@/components/VideoExportDialog";
 import { Button } from "@/components/ui/button";
@@ -42,7 +43,8 @@ export default function DashcamViewer() {
   const [seiFields, setSeiFields] = useState<FieldInfo[] | null>(null);
   const [primaryFilename, setPrimaryFilename] = useState<string>("");
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
-  
+  const [gpsPath, setGpsPath] = useState<LatLng[]>([]);
+
   const videoGridRef = useRef<VideoGridHandle>(null);
   const playTimerRef = useRef<number | null>(null);
   const frameDurationsRef = useRef<number[]>([]);
@@ -130,6 +132,12 @@ export default function DashcamViewer() {
         
         const sei = primaryFrames[startFrame]?.sei || null;
         setCurrentMetadata(sei);
+
+        const path: LatLng[] = primaryFrames.map((f) => ({
+          lat: f.sei?.latitudeDeg ?? 0,
+          lng: f.sei?.longitudeDeg ?? 0,
+        }));
+        setGpsPath(path);
 
         setTimeout(() => {
           videoGridRef.current?.renderAllFrames(startFrame);
@@ -303,6 +311,7 @@ export default function DashcamViewer() {
     setTotalFrames(0);
     setCurrentMetadata(null);
     setPrimaryFilename("");
+    setGpsPath([]);
   }, [handlePause]);
 
   const handleExportVideo = useCallback(() => {
@@ -364,6 +373,12 @@ export default function DashcamViewer() {
                 currentFrame={currentFrame}
               />
             </div>
+
+            <MapView
+              key={primaryFilename}
+              path={gpsPath}
+              currentIndex={currentFrame}
+            />
 
             <PlaybackControls
               isPlaying={isPlaying}
