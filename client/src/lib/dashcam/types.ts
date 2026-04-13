@@ -4,6 +4,11 @@ declare global {
     DashcamHelpers: typeof DashcamHelpers;
     protobuf: any;
     JSZip: any;
+    showDirectoryPicker?(options?: {
+      id?: string;
+      mode?: "read" | "readwrite";
+      startIn?: string;
+    }): Promise<FileSystemDirectoryHandle>;
   }
 }
 

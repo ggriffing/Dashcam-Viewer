@@ -61,7 +61,8 @@ export function TeslaDriveBrowser({ onFilesSelected, isLoading }: TeslaDriveBrow
     if (!supportsDirectoryPicker) return;
     setScanError(null);
     try {
-      const handle = await (window as any).showDirectoryPicker({ mode: "read" });
+      if (!window.showDirectoryPicker) return;
+      const handle = await window.showDirectoryPicker({ mode: "read" });
       setScanning(true);
       setDriveData(null);
       setExpandedEvent(null);
@@ -71,10 +72,10 @@ export function TeslaDriveBrowser({ onFilesSelected, isLoading }: TeslaDriveBrow
       if (data.categories.length > 0) {
         setExpandedCategories(new Set([data.categories[0].key]));
       }
-    } catch (err: any) {
-      if (err?.name !== "AbortError") {
-        setScanError(err?.message || "Failed to read the selected folder.");
-      }
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      const msg = err instanceof Error ? err.message : "Failed to read the selected folder.";
+      setScanError(msg);
     } finally {
       setScanning(false);
     }
