@@ -52,12 +52,21 @@ function loadGoogleMapsApi(apiKey: string): Promise<void> {
   });
 }
 
+const TESLA_MARKER_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 36" width="28" height="36">
+  <path d="M14 0C6.268 0 0 6.268 0 14c0 9.333 14 22 14 22S28 23.333 28 14C28 6.268 21.732 0 14 0z" fill="#E82127"/>
+  <path d="M7 10h14v2H15v8h-2v-8H7z" fill="white"/>
+  <path d="M9 10c0 0 1 1.5 5 1.5S19 10 19 10" stroke="white" stroke-width="1.5" fill="none"/>
+</svg>`;
+
+const TESLA_MARKER_URL = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(TESLA_MARKER_SVG)}`;
+
 export function MapView({ path, currentIndex }: MapViewProps) {
   const mapDivRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const markerRef = useRef<google.maps.Marker | null>(null);
   const pathKeyRef = useRef<number>(0);
   const [isReady, setIsReady] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   const apiKey = (
     (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined) ||
@@ -71,7 +80,7 @@ export function MapView({ path, currentIndex }: MapViewProps) {
     if (!apiKey || !hasGps) return;
     loadGoogleMapsApi(apiKey)
       .then(() => setIsReady(true))
-      .catch(() => {});
+      .catch(() => setLoadError(true));
   }, [apiKey, hasGps]);
 
   useEffect(() => {
@@ -115,12 +124,9 @@ export function MapView({ path, currentIndex }: MapViewProps) {
       position: markerPos,
       map,
       icon: {
-        path: window.google.maps.SymbolPath.CIRCLE,
-        scale: 8,
-        fillColor: "#E82127",
-        fillOpacity: 1,
-        strokeColor: "#FFFFFF",
-        strokeWeight: 2,
+        url: TESLA_MARKER_URL,
+        scaledSize: new window.google.maps.Size(28, 36),
+        anchor: new window.google.maps.Point(14, 36),
       },
       zIndex: 100,
     });
@@ -142,6 +148,20 @@ export function MapView({ path, currentIndex }: MapViewProps) {
   }, [currentIndex, path]);
 
   if (!apiKey || !hasGps) return null;
+
+  if (loadError) {
+    return (
+      <div
+        className="flex-shrink-0 w-full border-t border-[#393C41] bg-[#181818] flex items-center justify-center"
+        style={{ height: "180px" }}
+        data-testid="map-error"
+      >
+        <span className="text-sm text-white/30">
+          Map unavailable — check your Google Maps API key
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div
