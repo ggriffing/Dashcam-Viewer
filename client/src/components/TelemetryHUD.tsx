@@ -1,7 +1,6 @@
 import { 
   Gauge, 
   Navigation, 
-  MapPin, 
   Car, 
   CircleDot, 
   Zap,
@@ -38,12 +37,6 @@ function formatSpeed(mps: number | undefined): string {
   if (mps === undefined || mps === null) return "--";
   const mph = mps * 2.237;
   return Math.round(mph).toString();
-}
-
-function formatCoordinate(deg: number | undefined, isLat: boolean): string {
-  if (deg === undefined || deg === null) return "--";
-  const direction = isLat ? (deg >= 0 ? "N" : "S") : (deg >= 0 ? "E" : "W");
-  return `${Math.abs(deg).toFixed(4)}° ${direction}`;
 }
 
 function formatHeading(deg: number | undefined): string {
@@ -172,18 +165,6 @@ export function TelemetryHUD({
         </div>
 
         <div className="flex items-center gap-6 flex-wrap">
-          <div className="flex items-center gap-2">
-            <MapPin className="w-4 h-4 text-[#00FF00]" />
-            <div className="flex flex-col">
-              <span className="font-mono text-xs text-[#00FF00]" data-testid="text-latitude">
-                {formatCoordinate(metadata?.latitudeDeg, true)}
-              </span>
-              <span className="font-mono text-xs text-[#00FF00]" data-testid="text-longitude">
-                {formatCoordinate(metadata?.longitudeDeg, false)}
-              </span>
-            </div>
-          </div>
-
           <div className="flex flex-col items-end">
             <span className="font-mono text-sm text-[#00FF00]" data-testid="text-time">
               {formatTime(currentTime)} / {formatTime(duration)}
