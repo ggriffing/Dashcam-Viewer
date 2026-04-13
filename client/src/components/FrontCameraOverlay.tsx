@@ -60,26 +60,28 @@ function hasData(m: SeiMetadataRaw): boolean {
   );
 }
 
-function getState(m: SeiMetadataRaw): { state: "accel" | "brake"; litCount: number } | null {
+type DriveState = "accel" | "brake" | "coast";
+
+function getState(m: SeiMetadataRaw): { state: DriveState; litCount: number } {
   const ax = m.linearAccelerationMps2X;
   if (ax !== undefined) {
     if (ax > 0.5) return { state: "accel", litCount: accelToLit(ax) };
     if (ax < -0.5) return { state: "brake", litCount: accelToLit(ax) };
-    return null;
+    return { state: "coast", litCount: 0 };
   }
   if (m.brakeApplied) return { state: "brake", litCount: 3 };
   const pedal = m.acceleratorPedalPosition ?? 0;
   if (pedal > 0.05) return { state: "accel", litCount: Math.max(1, Math.round(pedal * N_ROWS)) };
-  return null;
+  return { state: "coast", litCount: 0 };
 }
 
 export function FrontCameraOverlay({ metadata }: FrontCameraOverlayProps) {
   if (!metadata || !hasData(metadata)) return null;
 
-  const result = getState(metadata);
-  if (!result) return null;
+  const speed = metadata.vehicleSpeedMps ?? -1;
+  if (speed === 0) return null;
 
-  const { state, litCount } = result;
+  const { state, litCount } = getState(metadata);
   const isBrake = state === "brake";
 
   return (
@@ -110,12 +112,14 @@ export function FrontCameraOverlay({ metadata }: FrontCameraOverlayProps) {
         </g>
       </svg>
 
-      <span
-        className="text-[9px] font-mono tracking-widest px-2 py-px rounded"
-        style={LABEL_STYLE}
-      >
-        {isBrake ? "BRAKE" : "ACCEL"}
-      </span>
+      {state !== "coast" && (
+        <span
+          className="text-[9px] font-mono tracking-widest px-2 py-px rounded"
+          style={LABEL_STYLE}
+        >
+          {isBrake ? "BRAKE" : "ACCEL"}
+        </span>
+      )}
     </div>
   );
 }
