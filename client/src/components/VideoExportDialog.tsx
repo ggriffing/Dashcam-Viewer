@@ -141,10 +141,17 @@ export function VideoExportDialog({
   const frontCamera = cameras.find(c => c.angle === "front" && c.isActive);
   const availableCameras = cameras.filter(c => c.isActive && c.angle !== "front");
 
+  const hasMapsApiKey = !!(
+    (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined) ||
+    (import.meta.env.VITE_GOOGLE_API_KEY as string | undefined)
+  );
+
   const hasGpsData = useMemo(() => {
     if (!frontCamera) return false;
     return frontCamera.frames.some(f => f.sei && (f.sei.latitudeDeg !== 0 || f.sei.longitudeDeg !== 0));
   }, [frontCamera]);
+
+  const canShowMapOption = hasGpsData && hasMapsApiKey;
 
   const handleCameraToggle = useCallback((angle: CameraAngle, checked: boolean) => {
     if (angle === "front") return;
@@ -368,7 +375,7 @@ export function VideoExportDialog({
       let staticMapInfo: StaticMapInfo | null = null;
       let markerImg: HTMLImageElement | null = null;
 
-      if (hasGpsData && includeMap) {
+      if (canShowMapOption && includeMap) {
         setStatusText("Fetching map image...");
         const gpsPath = frontCamera.frames
           .map(f => f.sei)
@@ -480,7 +487,7 @@ export function VideoExportDialog({
   }, [
     frontCamera, getSelectedCameras, getLayoutMode, frameDurations,
     drawTelemetryHUD, decodeAllFrames, primaryFilename, onOpenChange,
-    hasGpsData, includeMap,
+    canShowMapOption, includeMap,
   ]);
 
   const handleCancel = useCallback(() => {
@@ -527,7 +534,7 @@ export function VideoExportDialog({
             ))}
           </div>
 
-          {hasGpsData && (
+          {canShowMapOption && (
             <div className="border-t border-[#393C41] pt-3">
               <div className="flex items-center space-x-3">
                 <Checkbox
