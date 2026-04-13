@@ -5,7 +5,7 @@ import { TelemetryHUD } from "@/components/TelemetryHUD";
 import { MapView, type LatLng } from "@/components/MapView";
 import { TeslaDriveBrowser } from "@/components/TeslaDriveBrowser";
 import { VideoExportDialog } from "@/components/VideoExportDialog";
-import { AccelerationChart } from "@/components/AccelerationChart";
+import { EnergyFlowIndicator } from "@/components/EnergyFlowIndicator";
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
 import type { CameraAngle, VideoFrame, VideoConfig, SeiMetadataRaw, FieldInfo } from "@/lib/dashcam/types";
@@ -423,20 +423,7 @@ export default function DashcamViewer() {
               disabled={!hasVideos}
             />
 
-            {(() => {
-              const primaryCamera =
-                cameras.find(c => c.angle === 'front' && c.isActive) ||
-                cameras.find(c => c.isActive);
-              const primaryFrames = primaryCamera?.frames ?? [];
-              return (
-                <AccelerationChart
-                  frames={primaryFrames}
-                  currentFrame={currentFrame}
-                  totalFrames={totalFrames}
-                  onSeek={handleSeek}
-                />
-              );
-            })()}
+            <EnergyFlowIndicator metadata={currentMetadata} />
 
             <TelemetryHUD
               metadata={currentMetadata}
