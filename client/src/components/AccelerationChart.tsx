@@ -66,13 +66,12 @@ export function AccelerationChart({ frames, currentFrame, totalFrames, onSeek }:
     }
 
     const allVals = [...xRaw, ...yRaw, ...zRaw];
-    const rawMin = Math.min(...allVals, 0);
-    const rawMax = Math.max(...allVals, 0);
-    const pad = (rawMax - rawMin || 1) * 0.12;
-    const minVal = rawMin - pad;
-    const maxVal = rawMax + pad;
-    const range = maxVal - minVal || 1;
-    const zeroY = CHART_H - ((0 - minVal) / range) * CHART_H;
+    const absMax = Math.max(...allVals.map(Math.abs), 0.001);
+    const bound = absMax * 1.12;
+    const minVal = -bound;
+    const maxVal = bound;
+    const range = maxVal - minVal;
+    const zeroY = CHART_H / 2;
 
     const xDs = downsample(xRaw, MAX_POINTS);
     const yDs = downsample(yRaw, MAX_POINTS);
