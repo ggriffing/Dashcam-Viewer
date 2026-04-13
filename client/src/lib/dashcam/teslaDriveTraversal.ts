@@ -278,3 +278,169 @@ export async function scanTeslaDrive(
     "No TeslaCam folder found. Please select your Tesla flash drive, the TeslaCam folder, or a clip category folder (SavedClips, RecentClips, SentryClips)."
   );
 }
+
+// ---------------------------------------------------------------------------
+// webkitdirectory fallback — parse flat File[] by path
+// ---------------------------------------------------------------------------
+
+/**
+ * Wraps a plain File in a minimal FileSystemFileHandle-compatible object so
+ * that the rest of the drive-browser pipeline (which calls handle.getFile())
+ * works identically for both the showDirectoryPicker and folder-input paths.
+ */
+function fileToHandle(file: File): FileSystemFileHandle {
+  return {
+    kind: "file" as const,
+    name: file.name,
+    getFile: () => Promise.resolve(file),
+    isSameEntry: () => Promise.resolve(false),
+    queryPermission: () => Promise.resolve("granted" as PermissionState),
+    requestPermission: () => Promise.resolve("granted" as PermissionState),
+  } as unknown as FileSystemFileHandle;
+}
+
+/**
+ * Build a TeslaDriveData from a flat list of File objects obtained via an
+ * <input webkitdirectory> selection.  Each file's `webkitRelativePath`
+ * encodes the folder hierarchy, e.g.:
+ *   TESLADRIVE/TeslaCam/SavedClips/2026-03-11_11-06-32/2026-03-11_11-06-32-front.mp4
+ *
+ * Supports the same four starting-folder variants as scanTeslaDrive().
+ * Deduplicates multi-segment events: only the first (earliest) file per
+ * camera angle per event is kept.
+ */
+export function parseFolderFiles(files: File[]): TeslaDriveData {
+  const mp4Files = files.filter((f) =>
+    f.name.toLowerCase().endsWith(".mp4")
+  );
+
+  if (mp4Files.length === 0) {
+    throw new Error(
+      "No MP4 files found. Please select your Tesla flash drive, the TeslaCam folder, or a clip category folder."
+    );
+  }
+
+  // Drive name = first segment of the first file's relative path
+  const driveName = mp4Files[0].webkitRelativePath.split("/")[0] || "Drive";
+
+  type RawEntry = { category: string; event: string; file: File };
+  const rawEntries: RawEntry[] = [];
+
+  for (const file of mp4Files) {
+    const parts = file.webkitRelativePath.split("/");
+
+    // Search for a known TeslaCam anchor in the path segments
+    let catIdx = -1;
+
+    // Anchor: "TeslaCam" folder
+    const teslaCamIdx = parts.findIndex(
+      (p) => p.toLowerCase() === "teslacam"
+    );
+    if (teslaCamIdx >= 0 && parts.length > teslaCamIdx + 2) {
+      catIdx = teslaCamIdx + 1;
+    }
+
+    // Anchor: a clip-category folder (SavedClips / RecentClips / SentryClips)
+    if (catIdx < 0) {
+      const foundCat = parts.findIndex((p) =>
+        CATEGORY_BY_LOWER.has(p.toLowerCase())
+      );
+      if (foundCat >= 0 && parts.length > foundCat + 1) {
+        catIdx = foundCat;
+      }
+    }
+
+    // Anchor: timestamp-named event folder directly under the root
+    if (catIdx < 0) {
+      const foundEvent = parts.findIndex((p) => TIMESTAMP_PATTERN.test(p));
+      if (foundEvent >= 0 && parts.length > foundEvent) {
+        // Treat parent folder as the category, event folder as the event
+        rawEntries.push({
+          category: parts[foundEvent - 1] ?? "Event",
+          event: parts[foundEvent],
+          file,
+        });
+        continue;
+      }
+    }
+
+    if (catIdx < 0 || parts.length <= catIdx + 1) continue;
+
+    rawEntries.push({
+      category: parts[catIdx],
+      event: parts[catIdx + 1],
+      file,
+    });
+  }
+
+  if (rawEntries.length === 0) {
+    throw new Error(
+      "No TeslaCam footage found in the selected folder. Please select your Tesla flash drive, the TeslaCam folder, or a clip category folder (SavedClips, RecentClips, SentryClips)."
+    );
+  }
+
+  // Sort earliest timestamp first within each (category, event) group so the
+  // deduplication below keeps the first camera segment (same as scanEventDir).
+  rawEntries.sort((a, b) => a.file.name.localeCompare(b.file.name));
+
+  // Build category → event → camera map (one entry per camera name per event)
+  type CameraMap = Map<string, CameraEntry>;
+  type EventMap = Map<string, CameraMap>;
+  const categoryMap = new Map<string, EventMap>();
+
+  for (const { category, event, file } of rawEntries) {
+    const detected = detectCameraFromFilename(file.name);
+    if (!detected) continue;
+
+    if (!categoryMap.has(category)) categoryMap.set(category, new Map());
+    const eventMap = categoryMap.get(category)!;
+    if (!eventMap.has(event)) eventMap.set(event, new Map());
+    const cameraMap = eventMap.get(event)!;
+
+    if (!cameraMap.has(detected.cameraName)) {
+      cameraMap.set(detected.cameraName, {
+        cameraName: detected.cameraName,
+        label: CAMERA_LABELS[detected.cameraName] ?? detected.cameraName,
+        slot: detected.slot,
+        fileHandle: fileToHandle(file),
+      });
+    }
+  }
+
+  // Assemble CategoryData[] in standard order
+  const CATEGORY_ORDER_KEYS = ["savedclips", "recentclips", "sentryclips"];
+  const sortedCatKeys = Array.from(categoryMap.keys()).sort((a, b) => {
+    const ai = CATEGORY_ORDER_KEYS.indexOf(a.toLowerCase());
+    const bi = CATEGORY_ORDER_KEYS.indexOf(b.toLowerCase());
+    return (ai < 0 ? 99 : ai) - (bi < 0 ? 99 : bi);
+  });
+
+  const categories: CategoryData[] = [];
+
+  for (const catKey of sortedCatKeys) {
+    const eventMap = categoryMap.get(catKey)!;
+    const config =
+      CATEGORY_BY_LOWER.get(catKey.toLowerCase()) ??
+      { key: catKey, label: catKey };
+
+    const events: EventEntry[] = [];
+    for (const [eventName, cameraMap] of Array.from(eventMap.entries())) {
+      const cameras = Array.from(cameraMap.values());
+      cameras.sort((a, b) => {
+        const ai = CAMERA_ORDER.indexOf(a.cameraName);
+        const bi = CAMERA_ORDER.indexOf(b.cameraName);
+        return (ai < 0 ? 99 : ai) - (bi < 0 ? 99 : bi);
+      });
+      events.push({ name: eventName, cameras });
+    }
+
+    // Newest events first
+    events.sort((a, b) => b.name.localeCompare(a.name));
+
+    if (events.length > 0) {
+      categories.push({ key: config.key, label: config.label, events });
+    }
+  }
+
+  return { driveName, categories };
+}

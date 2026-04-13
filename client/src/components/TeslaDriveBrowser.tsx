@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, type RefObject } from "react";
+import { useState, useCallback, useRef, useEffect, type RefObject } from "react";
 import {
   HardDrive,
   ChevronRight,
@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import {
   scanTeslaDrive,
+  parseFolderFiles,
   type TeslaDriveData,
   type CategoryData,
   type EventEntry,
@@ -55,31 +56,78 @@ export function TeslaDriveBrowser({ onFilesSelected, isLoading }: TeslaDriveBrow
   const [isDragOver, setIsDragOver] = useState(false);
   const [loadingEvent, setLoadingEvent] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
   const supportsDirectoryPicker = typeof window !== "undefined" && "showDirectoryPicker" in window;
 
-  const handleSelectDrive = useCallback(async () => {
-    if (!supportsDirectoryPicker) return;
+  // webkitdirectory is not in React's types — set the attribute imperatively
+  useEffect(() => {
+    if (folderInputRef.current) {
+      folderInputRef.current.setAttribute("webkitdirectory", "");
+    }
+  }, []);
+
+  const applyDriveData = useCallback((data: TeslaDriveData) => {
+    setDriveData(data);
+    if (data.categories.length > 0) {
+      setExpandedCategories(new Set([data.categories[0].key]));
+    }
+  }, []);
+
+  // Handle the webkitdirectory folder input (cross-origin iframe fallback)
+  const handleFolderInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const fileList = e.target.files;
+    e.target.value = "";
+    if (!fileList) return;
     setScanError(null);
+    setScanning(true);
+    setDriveData(null);
+    setExpandedEvent(null);
+    setCheckedCameras(new Set());
     try {
-      if (!window.showDirectoryPicker) return;
+      const data = parseFolderFiles(Array.from(fileList));
+      applyDriveData(data);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to parse folder contents.";
+      setScanError(msg);
+    } finally {
+      setScanning(false);
+    }
+  }, [applyDriveData]);
+
+  const handleSelectDrive = useCallback(async () => {
+    setScanError(null);
+
+    // If the Directory Picker API is unavailable, fall back immediately
+    if (!supportsDirectoryPicker || !window.showDirectoryPicker) {
+      folderInputRef.current?.click();
+      return;
+    }
+
+    try {
       const handle = await window.showDirectoryPicker({ mode: "read" });
       setScanning(true);
       setDriveData(null);
       setExpandedEvent(null);
       setCheckedCameras(new Set());
       const data = await scanTeslaDrive(handle);
-      setDriveData(data);
-      if (data.categories.length > 0) {
-        setExpandedCategories(new Set([data.categories[0].key]));
-      }
+      applyDriveData(data);
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") return;
+      // Cross-origin iframe blocks showDirectoryPicker — fall back to the
+      // standard folder input which works inside iframes
+      if (
+        err instanceof DOMException &&
+        (err.name === "SecurityError" || err.name === "NotAllowedError")
+      ) {
+        folderInputRef.current?.click();
+        return;
+      }
       const msg = err instanceof Error ? err.message : "Failed to read the selected folder.";
       setScanError(msg);
     } finally {
       setScanning(false);
     }
-  }, [supportsDirectoryPicker]);
+  }, [supportsDirectoryPicker, applyDriveData]);
 
   const toggleCategory = useCallback((key: string) => {
     setExpandedCategories(prev => {
@@ -159,42 +207,59 @@ export function TeslaDriveBrowser({ onFilesSelected, isLoading }: TeslaDriveBrow
     );
   }
 
+  const hiddenFolderInput = (
+    <input
+      ref={folderInputRef as RefObject<HTMLInputElement>}
+      type="file"
+      multiple
+      onChange={handleFolderInput}
+      className="hidden"
+      data-testid="input-folder-fallback"
+    />
+  );
+
   if (driveData) {
     return (
-      <DriveView
-        driveData={driveData}
-        expandedCategories={expandedCategories}
-        expandedEvent={expandedEvent}
-        checkedCameras={checkedCameras}
-        loadingEvent={loadingEvent}
+      <>
+        {hiddenFolderInput}
+        <DriveView
+          driveData={driveData}
+          expandedCategories={expandedCategories}
+          expandedEvent={expandedEvent}
+          checkedCameras={checkedCameras}
+          loadingEvent={loadingEvent}
+          isDragOver={isDragOver}
+          onToggleCategory={toggleCategory}
+          onSelectEvent={selectEvent}
+          onToggleCamera={toggleCamera}
+          onLoadEvent={handleLoadEvent}
+          onChangeDrive={handleSelectDrive}
+          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(true); }}
+          onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsDragOver(false); }}
+          onDrop={handleDrop}
+          onFileInput={handleFileInput}
+          fileInputRef={fileInputRef}
+        />
+      </>
+    );
+  }
+
+  return (
+    <>
+      {hiddenFolderInput}
+      <InitialView
+        scanning={scanning}
+        scanError={scanError}
+        supportsDirectoryPicker={supportsDirectoryPicker}
         isDragOver={isDragOver}
-        onToggleCategory={toggleCategory}
-        onSelectEvent={selectEvent}
-        onToggleCamera={toggleCamera}
-        onLoadEvent={handleLoadEvent}
-        onChangeDrive={handleSelectDrive}
+        onSelectDrive={handleSelectDrive}
         onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(true); }}
         onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsDragOver(false); }}
         onDrop={handleDrop}
         onFileInput={handleFileInput}
         fileInputRef={fileInputRef}
       />
-    );
-  }
-
-  return (
-    <InitialView
-      scanning={scanning}
-      scanError={scanError}
-      supportsDirectoryPicker={supportsDirectoryPicker}
-      isDragOver={isDragOver}
-      onSelectDrive={handleSelectDrive}
-      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(true); }}
-      onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsDragOver(false); }}
-      onDrop={handleDrop}
-      onFileInput={handleFileInput}
-      fileInputRef={fileInputRef}
-    />
+    </>
   );
 }
 
