@@ -42,6 +42,11 @@ export async function registerRoutes(
       return;
     }
 
+    if (typeof path !== "string" || path.length > 8192) {
+      res.status(400).json({ error: "path parameter too long or missing" });
+      return;
+    }
+
     if (!/^\d+x\d+$/.test(size)) {
       res.status(400).json({ error: "Invalid size format" });
       return;
