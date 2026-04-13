@@ -196,14 +196,29 @@ async function scanFromTeslaCam(
     }
   }
 
+  console.log("[TeslaCam scan] folders found in TeslaCam:", Array.from(allEntries.keys()));
+
   const categories: CategoryData[] = [];
   for (const { key, label } of CATEGORY_CONFIG) {
-    const handle = allEntries.get(key);
-    if (!handle) continue;
-    const cat = await scanCategoryDir(handle, label);
-    if (cat.events.length > 0) categories.push(cat);
+    // Case-insensitive lookup so "RECENTCLIPS" or "recentclips" still matches
+    const matchKey = Array.from(allEntries.keys()).find(
+      (k) => k.toLowerCase() === key.toLowerCase()
+    );
+    const handle = matchKey ? allEntries.get(matchKey) : undefined;
+    if (!handle) {
+      console.log(`[TeslaCam scan] "${key}" not found — skipping`);
+      continue;
+    }
+    try {
+      const cat = await scanCategoryDir(handle, label);
+      console.log(`[TeslaCam scan] "${key}" → ${cat.events.length} events`);
+      if (cat.events.length > 0) categories.push(cat);
+    } catch (err) {
+      console.warn(`[TeslaCam scan] error scanning "${key}":`, err);
+    }
   }
 
+  console.log("[TeslaCam scan] final categories:", categories.map((c) => `${c.key}(${c.events.length})`));
   return { driveName, categories };
 }
 
