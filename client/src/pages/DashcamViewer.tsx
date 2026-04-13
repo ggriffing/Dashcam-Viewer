@@ -48,11 +48,14 @@ export default function DashcamViewer() {
   const [gpsPath, setGpsPath] = useState<LatLng[]>([]);
   const [mapKey, setMapKey] = useState(0);
 
+  const [videoLoadKey, setVideoLoadKey] = useState(0);
+
   const videoGridRef = useRef<VideoGridHandle>(null);
   const playTimerRef = useRef<number | null>(null);
   const frameDurationsRef = useRef<number[]>([]);
   const firstKeyframeRef = useRef(0);
   const currentFrameRef = useRef(0);
+  const loadIdRef = useRef(0);
 
   useEffect(() => {
     const initProtobuf = async () => {
@@ -71,6 +74,9 @@ export default function DashcamViewer() {
 
   const handleFilesSelected = useCallback(async (files: File[]) => {
     if (files.length === 0 || !seiType) return;
+
+    // Fix 1: Generation counter — any newer call will supersede this one.
+    const myId = ++loadIdRef.current;
 
     setIsLoading(true);
     setIsPlaying(false);
@@ -97,6 +103,10 @@ export default function DashcamViewer() {
 
         try {
           const buffer = await file.arrayBuffer();
+
+          // Fix 1: Bail out if a newer load started while we were awaiting.
+          if (myId !== loadIdRef.current) return;
+
           const mp4 = new window.DashcamMP4(buffer);
           const config = mp4.getConfig();
           const frames = mp4.parseFrames(seiType);
@@ -123,6 +133,9 @@ export default function DashcamViewer() {
         }
       }
 
+      // Fix 1: Final stale-load check before committing any state.
+      if (myId !== loadIdRef.current) return;
+
       const hasAnyVideo = newCameras.some(c => c.isActive);
       setCameras(newCameras);
       setHasVideos(hasAnyVideo);
@@ -130,6 +143,9 @@ export default function DashcamViewer() {
       setPrimaryFilename(primaryFile?.name || "");
 
       if (hasAnyVideo && primaryFrames.length > 0) {
+        // Fix 3: Increment key to guarantee a fresh VideoGrid mount (clean decoders).
+        setVideoLoadKey(k => k + 1);
+
         const startFrame = Math.max(0, firstKeyframeRef.current);
         setCurrentFrame(startFrame);
         
@@ -150,7 +166,10 @@ export default function DashcamViewer() {
     } catch (err) {
       console.error('Error loading files:', err);
     } finally {
-      setIsLoading(false);
+      // Fix 1: Only clear the loading spinner if we are still the active load.
+      if (myId === loadIdRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [seiType]);
 
@@ -361,17 +380,22 @@ export default function DashcamViewer() {
       </header>
 
       <main className="flex-1 min-h-0 flex flex-col">
-        {!hasVideos ? (
-          <div className="flex-1 p-4 min-h-0 overflow-y-auto">
-            <TeslaDriveBrowser
-              onFilesSelected={handleFilesSelected}
-              isLoading={isLoading}
-            />
-          </div>
-        ) : (
+        {/* Fix 2: Always mounted so driveData persists between event loads.
+            Hidden with CSS when videos are active; no state is lost. */}
+        <div className={!hasVideos ? "flex-1 p-4 min-h-0 overflow-y-auto" : "hidden"}>
+          <TeslaDriveBrowser
+            onFilesSelected={handleFilesSelected}
+            isLoading={isLoading}
+          />
+        </div>
+
+        {hasVideos && (
           <>
             <div className="flex-1 min-h-0">
+              {/* Fix 3: key=videoLoadKey forces a fresh VideoGrid (and clean
+                  VideoDecoders) every time a new event is loaded. */}
               <VideoGrid
+                key={videoLoadKey}
                 ref={videoGridRef}
                 cameras={cameras}
                 currentFrame={currentFrame}
