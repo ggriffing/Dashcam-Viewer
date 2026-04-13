@@ -15,6 +15,8 @@ interface DropZoneProps {
 function detectCameraAngle(filename: string): string | null {
   const lower = filename.toLowerCase();
   if (lower.includes('front')) return 'front';
+  if (lower.includes('left_pillar') || lower.includes('left-pillar')) return 'left';
+  if (lower.includes('right_pillar') || lower.includes('right-pillar')) return 'right';
   if (lower.includes('left_repeater') || lower.includes('left-repeater') || (lower.includes('left') && !lower.includes('right'))) return 'left';
   if (lower.includes('right_repeater') || lower.includes('right-repeater') || (lower.includes('right') && !lower.includes('left'))) return 'right';
   if (lower.includes('back') || lower.includes('rear')) return 'rear';

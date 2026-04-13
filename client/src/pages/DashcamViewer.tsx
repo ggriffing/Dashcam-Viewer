@@ -3,7 +3,7 @@ import { VideoGrid, type VideoGridHandle } from "@/components/VideoGrid";
 import { PlaybackControls } from "@/components/PlaybackControls";
 import { TelemetryHUD } from "@/components/TelemetryHUD";
 import { MapView, type LatLng } from "@/components/MapView";
-import { DropZone } from "@/components/DropZone";
+import { TeslaDriveBrowser } from "@/components/TeslaDriveBrowser";
 import { VideoExportDialog } from "@/components/VideoExportDialog";
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
@@ -20,6 +20,8 @@ interface CameraData {
 function detectCameraAngle(filename: string): CameraAngle | null {
   const lower = filename.toLowerCase();
   if (lower.includes('front')) return 'front';
+  if (lower.includes('left_pillar') || lower.includes('left-pillar')) return 'left';
+  if (lower.includes('right_pillar') || lower.includes('right-pillar')) return 'right';
   if (lower.includes('left_repeater') || lower.includes('left-repeater') || (lower.includes('left') && !lower.includes('right'))) return 'left';
   if (lower.includes('right_repeater') || lower.includes('right-repeater') || (lower.includes('right') && !lower.includes('left'))) return 'right';
   if (lower.includes('back') || lower.includes('rear')) return 'rear';
@@ -360,8 +362,8 @@ export default function DashcamViewer() {
 
       <main className="flex-1 min-h-0 flex flex-col">
         {!hasVideos ? (
-          <div className="flex-1 p-4">
-            <DropZone 
+          <div className="flex-1 p-4 min-h-0 overflow-y-auto">
+            <TeslaDriveBrowser
               onFilesSelected={handleFilesSelected}
               isLoading={isLoading}
             />

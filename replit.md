@@ -40,12 +40,23 @@ Preferred communication style: Simple, everyday language.
 
 4. **Vendor Libraries**: External dependencies (protobuf.js, jszip, custom dashcam-mp4 parser) are loaded as vendor scripts rather than npm packages to reduce bundle size and avoid compatibility issues.
 
+### Tesla Drive Browser
+- **Primary Entry**: `TeslaDriveBrowser` component replaces the old DropZone as the main file loading UI
+- **Directory Picker**: Uses File System Access API (`showDirectoryPicker`) to browse the Tesla flash drive
+- **Drive Traversal**: `teslaDriveTraversal.ts` utility scans `TeslaCam/SavedClips|RecentClips|SentryClips` event folders
+- **Event Browser**: Collapsible category sections, events listed newest-first, per-event camera checkboxes
+- **Camera Detection**: Supports front, back, left_repeater, left_pillar, right_repeater, right_pillar; pillar cameras map to left/right slots
+- **Drag-Drop Fallback**: Compact drag-and-drop zone at the bottom of the browser for manual MP4 file loading
+- **Browser Support**: `showDirectoryPicker` requires Chrome or Edge (same browsers required for WebCodecs)
+
 ### Data Flow
-1. User drops MP4 files or folders onto the drop zone
-2. Files are parsed using DashcamMP4 class to extract video frames and SEI metadata
-3. Camera angle is auto-detected from filename patterns
-4. Video frames are decoded using WebCodecs and rendered to canvas elements
-5. SEI metadata is displayed in real-time telemetry HUD overlay
+1. User selects Tesla flash drive via directory picker, or drags MP4 files
+2. Drive is scanned for TeslaCam folder structure; events listed by category/timestamp
+3. User selects an event and checks desired camera angles, then clicks Load
+4. Files are parsed using DashcamMP4 class to extract video frames and SEI metadata
+5. Camera angle is auto-detected from filename patterns
+6. Video frames are decoded using WebCodecs and rendered to canvas elements
+7. SEI metadata is displayed in real-time telemetry HUD overlay
 
 ### Video Export Feature
 - **Export Merged Video**: Users can export selected camera angles into a single MP4 video with telemetry overlay
