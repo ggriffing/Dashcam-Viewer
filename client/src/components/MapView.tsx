@@ -20,7 +20,7 @@ declare global {
 }
 
 function loadGoogleMapsApi(apiKey: string): Promise<void> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     if (window.google?.maps) {
       resolve();
       return;
@@ -41,6 +41,12 @@ function loadGoogleMapsApi(apiKey: string): Promise<void> {
       script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=__gmapsInit`;
       script.async = true;
       script.defer = true;
+      script.onerror = () => {
+        console.error("[MapView] Failed to load Google Maps JavaScript API. Check that VITE_GOOGLE_MAPS_API_KEY is valid and the Maps JavaScript API is enabled.");
+        window.__gmapsScriptLoading = false;
+        window.__gmapsInitCallbacks = [];
+        reject(new Error("Google Maps script failed to load"));
+      };
       document.head.appendChild(script);
     }
   });
@@ -63,7 +69,9 @@ export function MapView({ path, currentIndex }: MapViewProps) {
 
   useEffect(() => {
     if (!apiKey || !hasGps) return;
-    loadGoogleMapsApi(apiKey).then(() => setIsReady(true));
+    loadGoogleMapsApi(apiKey)
+      .then(() => setIsReady(true))
+      .catch(() => {});
   }, [apiKey, hasGps]);
 
   useEffect(() => {
