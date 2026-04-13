@@ -309,6 +309,10 @@ function fileToHandle(file: File): FileSystemFileHandle {
  * Deduplicates multi-segment events: only the first (earliest) file per
  * camera angle per event is kept.
  */
+// Matches the event timestamp at the START of a Tesla filename, e.g.
+// "2026-03-11_11-06-32-front.mp4" → captures "2026-03-11_11-06-32"
+const FILENAME_TIMESTAMP_RE = /^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})/;
+
 export function parseFolderFiles(files: File[]): TeslaDriveData {
   const mp4Files = files.filter((f) =>
     f.name.toLowerCase().endsWith(".mp4")
@@ -316,12 +320,15 @@ export function parseFolderFiles(files: File[]): TeslaDriveData {
 
   if (mp4Files.length === 0) {
     throw new Error(
-      "No MP4 files found. Please select your Tesla flash drive, the TeslaCam folder, or a clip category folder."
+      "No MP4 files found. Please select your Tesla flash drive, the TeslaCam folder, or a clip category folder (SavedClips, RecentClips, SentryClips)."
     );
   }
 
-  // Drive name = first segment of the first file's relative path
-  const driveName = mp4Files[0].webkitRelativePath.split("/")[0] || "Drive";
+  // Drive name = first path segment (or "Drive" when there is no path depth)
+  const firstPath = mp4Files[0].webkitRelativePath;
+  const driveName = (firstPath && firstPath.includes("/"))
+    ? firstPath.split("/")[0]
+    : "Drive";
 
   type RawEntry = { category: string; event: string; file: File };
   const rawEntries: RawEntry[] = [];
@@ -364,7 +371,18 @@ export function parseFolderFiles(files: File[]): TeslaDriveData {
       }
     }
 
-    if (catIdx < 0 || parts.length <= catIdx + 1) continue;
+    if (catIdx < 0) {
+      // No folder structure detected — file was selected individually.
+      // Extract the event timestamp prefix from the filename itself so we can
+      // still group files by event (e.g. "2026-03-11_11-06-32-front.mp4" → event "2026-03-11_11-06-32").
+      const tsMatch = FILENAME_TIMESTAMP_RE.exec(file.name);
+      if (tsMatch) {
+        rawEntries.push({ category: "Event", event: tsMatch[1], file });
+      }
+      continue;
+    }
+
+    if (parts.length <= catIdx + 1) continue;
 
     rawEntries.push({
       category: parts[catIdx],
