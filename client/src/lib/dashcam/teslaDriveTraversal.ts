@@ -155,11 +155,55 @@ async function scanCategoryDir(
   label: string
 ): Promise<CategoryData> {
   const events: EventEntry[] = [];
+  const flatFiles: Array<{ name: string; handle: FileSystemFileHandle }> = [];
 
   for await (const [name, handle] of iterDir(categoryHandle).entries()) {
-    if (handle.kind !== "directory") continue;
-    const cameras = await scanEventDir(handle as FileSystemDirectoryHandle);
-    if (cameras.length > 0) events.push({ name, cameras });
+    if (handle.kind === "directory") {
+      const cameras = await scanEventDir(handle as FileSystemDirectoryHandle);
+      if (cameras.length > 0) events.push({ name, cameras });
+    } else if (handle.kind === "file" && name.toLowerCase().endsWith(".mp4")) {
+      // Tesla sometimes stores clips flat (no event subfolder) — collect for grouping
+      flatFiles.push({ name, handle: handle as FileSystemFileHandle });
+    }
+  }
+
+  console.log(
+    `[scanCategoryDir] ${categoryHandle.name}: ${events.length} subfolder-events, ${flatFiles.length} flat mp4 files`
+  );
+
+  // If no subfolder events were found, try grouping flat MP4 files by timestamp prefix
+  if (events.length === 0 && flatFiles.length > 0) {
+    flatFiles.sort((a, b) => a.name.localeCompare(b.name));
+    const groups = new Map<string, Array<{ name: string; handle: FileSystemFileHandle }>>();
+    for (const { name, handle } of flatFiles) {
+      const tsMatch = FILENAME_TIMESTAMP_RE.exec(name);
+      if (!tsMatch) continue;
+      const key = tsMatch[1];
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push({ name, handle });
+    }
+    for (const [eventName, files] of groups) {
+      const seen = new Set<string>();
+      const cameras: CameraEntry[] = [];
+      for (const { name, handle } of files) {
+        const detected = detectCameraFromFilename(name);
+        if (!detected || seen.has(detected.cameraName)) continue;
+        seen.add(detected.cameraName);
+        cameras.push({
+          cameraName: detected.cameraName,
+          label: CAMERA_LABELS[detected.cameraName] ?? detected.cameraName,
+          slot: detected.slot,
+          fileHandle: handle,
+        });
+      }
+      cameras.sort((a, b) => {
+        const ai = CAMERA_ORDER.indexOf(a.cameraName);
+        const bi = CAMERA_ORDER.indexOf(b.cameraName);
+        return (ai < 0 ? 99 : ai) - (bi < 0 ? 99 : bi);
+      });
+      if (cameras.length > 0) events.push({ name: eventName, cameras });
+    }
+    console.log(`[scanCategoryDir] ${categoryHandle.name}: regrouped flat files → ${events.length} events`);
   }
 
   events.sort((a, b) => b.name.localeCompare(a.name));
@@ -173,6 +217,7 @@ const CATEGORY_CONFIG: Array<{ key: string; label: string }> = [
   { key: "SavedClips", label: "Saved Clips" },
   { key: "RecentClips", label: "Recent Clips" },
   { key: "SentryClips", label: "Sentry Clips" },
+  { key: "EncryptedClips", label: "Encrypted Clips" },
 ];
 
 const CATEGORY_BY_LOWER = new Map<string, { key: string; label: string }>(
@@ -458,7 +503,7 @@ export function parseFolderFiles(files: File[]): TeslaDriveData {
   }
 
   // Assemble CategoryData[] in standard order
-  const CATEGORY_ORDER_KEYS = ["savedclips", "recentclips", "sentryclips"];
+  const CATEGORY_ORDER_KEYS = ["savedclips", "recentclips", "sentryclips", "encryptedclips"];
   const sortedCatKeys = Array.from(categoryMap.keys()).sort((a, b) => {
     const ai = CATEGORY_ORDER_KEYS.indexOf(a.toLowerCase());
     const bi = CATEGORY_ORDER_KEYS.indexOf(b.toLowerCase());
