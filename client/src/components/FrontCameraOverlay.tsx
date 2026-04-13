@@ -5,19 +5,26 @@ interface FrontCameraOverlayProps {
 }
 
 const N_ROWS = 5;
-const CHEV_H = 9;
-const THICK = 7;
-const GAP = 4;
+const CHEV_H = 11;
+const THICK = 4;
+const GAP = 1;
 const ROW_H = CHEV_H + THICK + GAP;
 const SVG_W = 200;
 const SVG_H = ROW_H * N_ROWS - GAP;
 const CX = SVG_W / 2;
 const LIT_OPACITY = 1;
-const DIM_OPACITY = 0.1;
+const DIM_OPACITY = 0.15;
 const BLUE = "#3B82F6";
+const RENDER_W = 180;
+const RENDER_H = Math.round(RENDER_W * SVG_H / SVG_W);
+
+const LABEL_STYLE: { color: string; background: string } = {
+  color: BLUE,
+  background: "rgba(0,0,0,0.6)",
+};
 
 function halfWidth(row: number): number {
-  return 96 - row * 18;
+  return 100 - row * 20;
 }
 
 function makeUpPath(row: number): string {
@@ -34,6 +41,7 @@ function makeUpPath(row: number): string {
 }
 
 const PATHS = Array.from({ length: N_ROWS }, (_, i) => makeUpPath(i));
+const FLIP_TRANSFORM = `scale(1,-1) translate(0,${-SVG_H})`;
 
 function accelToLit(ax: number): number {
   const a = Math.abs(ax);
@@ -73,14 +81,13 @@ export function FrontCameraOverlay({ metadata }: FrontCameraOverlayProps) {
 
   const { state, litCount } = result;
   const isBrake = state === "brake";
-  const flipTransform = `scale(1,-1) translate(0,${-SVG_H})`;
 
   return (
     <div className="absolute bottom-8 left-1/2 -translate-x-1/2 pointer-events-none flex flex-col items-center gap-0.5">
       <svg
         viewBox={`0 0 ${SVG_W} ${SVG_H}`}
-        width={150}
-        height={Math.round(150 * SVG_H / SVG_W)}
+        width={RENDER_W}
+        height={RENDER_H}
         overflow="visible"
       >
         <rect
@@ -91,7 +98,7 @@ export function FrontCameraOverlay({ metadata }: FrontCameraOverlayProps) {
           fillOpacity={0.5}
         />
 
-        <g transform={isBrake ? flipTransform : undefined}>
+        <g transform={isBrake ? FLIP_TRANSFORM : undefined}>
           {PATHS.map((d, row) => (
             <path
               key={row}
@@ -105,7 +112,7 @@ export function FrontCameraOverlay({ metadata }: FrontCameraOverlayProps) {
 
       <span
         className="text-[9px] font-mono tracking-widest px-2 py-px rounded"
-        style={{ color: BLUE, background: "rgba(0,0,0,0.6)" }}
+        style={LABEL_STYLE}
       >
         {isBrake ? "BRAKE" : "ACCEL"}
       </span>
