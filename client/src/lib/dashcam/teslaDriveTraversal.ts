@@ -84,8 +84,10 @@ export function detectCameraFromFilename(
 
   // Keyword fallback
   if (lower.includes("front")) return { cameraName: "front", slot: "front" };
-  if (lower.includes("left_pillar")) return { cameraName: "left_pillar", slot: "left" };
-  if (lower.includes("right_pillar")) return { cameraName: "right_pillar", slot: "right" };
+  if (lower.includes("left_pillar") || lower.includes("left-pillar"))
+    return { cameraName: "left_pillar", slot: "left" };
+  if (lower.includes("right_pillar") || lower.includes("right-pillar"))
+    return { cameraName: "right_pillar", slot: "right" };
   if (lower.includes("left_repeater") || lower.includes("left-repeater"))
     return { cameraName: "left_repeater", slot: "left" };
   if (lower.includes("right_repeater") || lower.includes("right-repeater"))
