@@ -6,21 +6,55 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // Map proxy — fetches a Google Maps Static API image server-side so the
-  // browser can draw it on a WebCodecs-bound canvas without CORS tainting.
+  // Proxy that fetches a Google Maps Static API image server-side so the
+  // browser canvas stays origin-clean for WebCodecs VideoFrame creation.
+  // Accepts structured map parameters (never a caller-supplied URL).
   app.get("/api/map-proxy", async (req, res) => {
-    const rawUrl = req.query.url as string | undefined;
-    if (!rawUrl) {
-      res.status(400).json({ error: "Missing url parameter" });
+    const apiKey =
+      process.env.VITE_GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_API_KEY;
+    if (!apiKey) {
+      res.status(503).json({ error: "Maps API key not configured on server" });
       return;
     }
-    // Only allow Google Maps Static API URLs to prevent open-proxy abuse.
-    if (!rawUrl.startsWith("https://maps.googleapis.com/maps/api/staticmap")) {
-      res.status(403).json({ error: "Only Google Maps Static API URLs are allowed" });
+
+    const { center, zoom, path, size } = req.query as Record<string, string | undefined>;
+
+    if (!center || !zoom || !path || !size) {
+      res.status(400).json({ error: "Missing required parameters: center, zoom, path, size" });
       return;
     }
+
+    if (!/^-?\d+(\.\d+)?,-?\d+(\.\d+)?$/.test(center)) {
+      res.status(400).json({ error: "Invalid center format" });
+      return;
+    }
+
+    const zoomNum = parseInt(zoom, 10);
+    if (Number.isNaN(zoomNum) || zoomNum < 1 || zoomNum > 20) {
+      res.status(400).json({ error: "Invalid zoom value" });
+      return;
+    }
+
+    if (!/^\d+x\d+$/.test(size)) {
+      res.status(400).json({ error: "Invalid size format" });
+      return;
+    }
+    const [w, h] = size.split("x").map(Number);
+    if (w < 1 || w > 640 || h < 1 || h > 640) {
+      res.status(400).json({ error: "Size out of allowed range (max 640x640)" });
+      return;
+    }
+
+    const url = new URL("https://maps.googleapis.com/maps/api/staticmap");
+    url.searchParams.set("center", center);
+    url.searchParams.set("zoom", String(zoomNum));
+    url.searchParams.set("size", size);
+    url.searchParams.set("maptype", "roadmap");
+    url.searchParams.set("path", path);
+    url.searchParams.set("key", apiKey);
+
     try {
-      const upstream = await fetch(rawUrl);
+      const upstream = await fetch(url.toString());
       if (!upstream.ok) {
         res.status(upstream.status).json({ error: "Maps API request failed" });
         return;

@@ -16,31 +16,18 @@ import { Film, Download } from "lucide-react";
 import type { CameraAngle, VideoFrame as DashcamVideoFrame, VideoConfig, SeiMetadataRaw } from "@/lib/dashcam/types";
 import { fetchStaticMapImage, latLngToMapPixel, type StaticMapInfo } from "@/lib/dashcam/staticMapOverlay";
 
-// ---------------------------------------------------------------------------
-// Tesla marker SVG (same teardrop used in MapView)
-// ---------------------------------------------------------------------------
-
 const TESLA_MARKER_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 36" width="28" height="36">
   <path d="M14 0C6.268 0 0 6.268 0 14c0 9.333 14 22 14 22S28 23.333 28 14C28 6.268 21.732 0 14 0z" fill="#E82127"/>
   <path d="M7 10h14v2H15v8h-2v-8H7z" fill="white"/>
   <path d="M9 10c0 0 1 1.5 5 1.5S19 10 19 10" stroke="white" stroke-width="1.5" fill="none"/>
 </svg>`;
-
 const TESLA_MARKER_URL = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(TESLA_MARKER_SVG)}`;
 
-// ---------------------------------------------------------------------------
-// Map overlay constants
-// ---------------------------------------------------------------------------
-
-const MAP_W = 240;  // thumbnail width in export canvas pixels
-const MAP_H = 180;  // thumbnail height in export canvas pixels
+const MAP_W = 240;
+const MAP_H = 180;
 const MAP_MARGIN = 8;
-const MARKER_W = 18; // marker width in thumbnail pixels
-const MARKER_H = 23; // marker height in thumbnail pixels
-
-// ---------------------------------------------------------------------------
-// Types & static data
-// ---------------------------------------------------------------------------
+const MARKER_W = 18;
+const MARKER_H = 23;
 
 interface CameraData {
   angle: CameraAngle;
@@ -60,68 +47,42 @@ interface VideoExportDialogProps {
 
 type LayoutMode = "single" | "dual-horizontal" | "triple-horizontal" | "quad";
 
-const GEAR_LABELS: Record<number, string> = {
-  0: "P", 1: "D", 2: "R", 3: "N",
-};
-
-const AUTOPILOT_LABELS: Record<number, string> = {
-  0: "OFF", 1: "FSD", 2: "AUTOSTEER", 3: "TACC",
-};
-
+const GEAR_LABELS: Record<number, string> = { 0: "P", 1: "D", 2: "R", 3: "N" };
+const AUTOPILOT_LABELS: Record<number, string> = { 0: "OFF", 1: "FSD", 2: "AUTOSTEER", 3: "TACC" };
 const CAMERA_GRID_POSITIONS: Record<CameraAngle, { row: number; col: number }> = {
-  front: { row: 0, col: 0 },
-  right: { row: 0, col: 1 },
-  left: { row: 1, col: 0 },
-  rear: { row: 1, col: 1 },
+  front: { row: 0, col: 0 }, right: { row: 0, col: 1 },
+  left: { row: 1, col: 0 }, rear: { row: 1, col: 1 },
 };
-
-// ---------------------------------------------------------------------------
-// Format helpers
-// ---------------------------------------------------------------------------
 
 function formatSpeed(mps: number | undefined): string {
   if (mps === undefined || mps === null) return "--";
   return Math.round(mps * 2.237).toString();
 }
-
 function formatHeading(deg: number | undefined): string {
   if (deg === undefined || deg === null) return "--";
-  const directions = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
-  const index = Math.round(deg / 45) % 8;
-  return `${Math.round(deg)}° ${directions[index]}`;
+  const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+  return `${Math.round(deg)}° ${dirs[Math.round(deg / 45) % 8]}`;
 }
-
 function formatSteeringAngle(deg: number | undefined): string {
   if (deg === undefined || deg === null) return "--";
-  const direction = deg > 0 ? "R" : deg < 0 ? "L" : "";
-  return `${Math.abs(deg).toFixed(1)}° ${direction}`;
+  const dir = deg > 0 ? "R" : deg < 0 ? "L" : "";
+  return `${Math.abs(deg).toFixed(1)}° ${dir}`;
 }
-
 function formatCoordinate(deg: number | undefined, isLat: boolean): string {
   if (deg === undefined || deg === null) return "--";
-  const direction = isLat ? (deg >= 0 ? "N" : "S") : (deg >= 0 ? "E" : "W");
-  return `${Math.abs(deg).toFixed(4)}° ${direction}`;
+  const dir = isLat ? (deg >= 0 ? "N" : "S") : (deg >= 0 ? "E" : "W");
+  return `${Math.abs(deg).toFixed(4)}° ${dir}`;
 }
-
 function formatAccelerator(pos: number | undefined): string {
   if (pos === undefined || pos === null) return "--";
   return `${Math.round(pos * 100)}%`;
 }
-
 function formatTime(frameIndex: number, durations: number[]): string {
   let totalMs = 0;
-  for (let i = 0; i < frameIndex && i < durations.length; i++) {
-    totalMs += durations[i];
-  }
-  const seconds = totalMs / 1000;
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, "0")}`;
+  for (let i = 0; i < frameIndex && i < durations.length; i++) totalMs += durations[i];
+  const secs = totalMs / 1000;
+  return `${Math.floor(secs / 60)}:${Math.floor(secs % 60).toString().padStart(2, "0")}`;
 }
-
-// ---------------------------------------------------------------------------
-// Map overlay drawing (pure canvas, no React state)
-// ---------------------------------------------------------------------------
 
 function drawMapOverlay(
   ctx: CanvasRenderingContext2D,
@@ -135,38 +96,22 @@ function drawMapOverlay(
   const x = canvasWidth - MAP_W - MAP_MARGIN;
   const y = hudTop - MAP_H - MAP_MARGIN;
 
-  // Clip to thumbnail bounds so marker doesn't overflow
   ctx.save();
   ctx.beginPath();
   ctx.rect(x, y, MAP_W, MAP_H);
   ctx.clip();
-
   ctx.drawImage(mapInfo.image, x, y, MAP_W, MAP_H);
 
-  // Project the GPS point onto the thumbnail
-  const pixel = latLngToMapPixel(
-    lat, lng,
-    mapInfo.centerLat, mapInfo.centerLng, mapInfo.zoom,
-    mapInfo.pixelWidth, mapInfo.pixelHeight,
-  );
-  const scaleX = MAP_W / mapInfo.pixelWidth;
-  const scaleY = MAP_H / mapInfo.pixelHeight;
-  const markerX = x + pixel.x * scaleX;
-  const markerY = y + pixel.y * scaleY;
-
+  const pixel = latLngToMapPixel(lat, lng, mapInfo.centerLat, mapInfo.centerLng, mapInfo.zoom, mapInfo.pixelWidth, mapInfo.pixelHeight);
+  const markerX = x + pixel.x * (MAP_W / mapInfo.pixelWidth);
+  const markerY = y + pixel.y * (MAP_H / mapInfo.pixelHeight);
   ctx.drawImage(markerImg, markerX - MARKER_W / 2, markerY - MARKER_H, MARKER_W, MARKER_H);
-
   ctx.restore();
 
-  // Border (outside clip so it fully covers the edge pixels)
   ctx.strokeStyle = "rgba(255, 255, 255, 0.7)";
   ctx.lineWidth = 1.5;
   ctx.strokeRect(x, y, MAP_W, MAP_H);
 }
-
-// ---------------------------------------------------------------------------
-// Pre-load an image from a URL (resolves to null on error)
-// ---------------------------------------------------------------------------
 
 function loadImage(src: string): Promise<HTMLImageElement | null> {
   return new Promise((resolve) => {
@@ -177,10 +122,6 @@ function loadImage(src: string): Promise<HTMLImageElement | null> {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
-
 export function VideoExportDialog({
   open,
   onOpenChange,
@@ -189,10 +130,7 @@ export function VideoExportDialog({
   primaryFilename,
 }: VideoExportDialogProps) {
   const [selectedCameras, setSelectedCameras] = useState<Record<CameraAngle, boolean>>({
-    front: true,
-    left: false,
-    right: false,
-    rear: false,
+    front: true, left: false, right: false, rear: false,
   });
   const [includeMap, setIncludeMap] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
@@ -203,22 +141,10 @@ export function VideoExportDialog({
   const frontCamera = cameras.find(c => c.angle === "front" && c.isActive);
   const availableCameras = cameras.filter(c => c.isActive && c.angle !== "front");
 
-  const apiKey = (
-    (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined) ||
-    (import.meta.env.VITE_GOOGLE_API_KEY as string | undefined) ||
-    ""
-  );
-
-  // Check whether any front-camera frame carries valid GPS coordinates.
   const hasGpsData = useMemo(() => {
     if (!frontCamera) return false;
-    return frontCamera.frames.some(
-      f => f.sei && (f.sei.latitudeDeg !== 0 || f.sei.longitudeDeg !== 0),
-    );
+    return frontCamera.frames.some(f => f.sei && (f.sei.latitudeDeg !== 0 || f.sei.longitudeDeg !== 0));
   }, [frontCamera]);
-
-  // Only show the map checkbox when GPS data AND an API key are both available.
-  const canIncludeMap = hasGpsData && !!apiKey;
 
   const handleCameraToggle = useCallback((angle: CameraAngle, checked: boolean) => {
     if (angle === "front") return;
@@ -229,7 +155,6 @@ export function VideoExportDialog({
     const selected = Object.entries(selectedCameras)
       .filter(([angle, checked]) => checked && cameras.find(c => c.angle === angle)?.isActive)
       .map(([angle]) => angle as CameraAngle);
-
     if (selected.length === 1) return "single";
     if (selected.length === 2) return "dual-horizontal";
     if (selected.length === 3) return "triple-horizontal";
@@ -251,11 +176,10 @@ export function VideoExportDialog({
     metadata: SeiMetadataRaw | null,
     frameIndex: number,
     totalFrames: number,
-    filename: string
+    _filename: string,
   ) => {
     ctx.fillStyle = "rgba(0, 0, 0, 0.9)";
     ctx.fillRect(0, yOffset, width, hudHeight);
-
     ctx.strokeStyle = "#393C41";
     ctx.lineWidth = 1;
     ctx.beginPath();
@@ -297,8 +221,8 @@ export function VideoExportDialog({
     ctx.fillText(autopilot, x, centerY);
     x += ctx.measureText(autopilot).width + 15;
 
-    const headingText = formatHeading(metadata?.headingDeg);
     ctx.fillStyle = hudColor;
+    const headingText = formatHeading(metadata?.headingDeg);
     ctx.fillText(headingText, x, centerY);
     x += ctx.measureText(headingText).width + 10;
 
@@ -306,8 +230,7 @@ export function VideoExportDialog({
     ctx.fillText(steeringText, x, centerY);
     x += ctx.measureText(steeringText).width + 10;
 
-    const brakeActive = metadata?.brakeApplied;
-    ctx.fillStyle = brakeActive ? "#EF4444" : hudColorDim;
+    ctx.fillStyle = metadata?.brakeApplied ? "#EF4444" : hudColorDim;
     ctx.fillText("BRK", x, centerY);
     x += ctx.measureText("BRK").width + 5;
 
@@ -319,8 +242,8 @@ export function VideoExportDialog({
     ctx.fillText("R", x, centerY);
     x += ctx.measureText("R").width + 10;
 
-    const accelText = `ACCEL ${formatAccelerator(metadata?.acceleratorPedalPosition)}`;
     ctx.fillStyle = hudColor;
+    const accelText = `ACCEL ${formatAccelerator(metadata?.acceleratorPedalPosition)}`;
     ctx.fillText(accelText, x, centerY);
     x += ctx.measureText(accelText).width + 15;
 
@@ -330,15 +253,13 @@ export function VideoExportDialog({
 
     ctx.textAlign = "right";
     ctx.fillStyle = hudColor;
-    const timeText = `${formatTime(frameIndex, frameDurations)} | ${frameIndex + 1}/${totalFrames}`;
-    ctx.fillText(timeText, width - 20, centerY);
-
+    ctx.fillText(`${formatTime(frameIndex, frameDurations)} | ${frameIndex + 1}/${totalFrames}`, width - 20, centerY);
     ctx.textAlign = "left";
   }, [frameDurations]);
 
   const decodeAllFrames = useCallback(async (
     frames: DashcamVideoFrame[],
-    config: VideoConfig
+    config: VideoConfig,
   ): Promise<(VideoFrame | null)[]> => {
     const results: (VideoFrame | null)[] = new Array(frames.length).fill(null);
     const DashcamMP4Class = (window as any).DashcamMP4;
@@ -346,53 +267,24 @@ export function VideoExportDialog({
 
     return new Promise((resolve) => {
       let outputIndex = 0;
-
       const decoder = new VideoDecoder({
-        output: (videoFrame: VideoFrame) => {
-          results[outputIndex] = videoFrame;
-          outputIndex++;
-        },
-        error: (e) => {
-          console.error("Decoder error:", e);
-        },
+        output: (videoFrame: VideoFrame) => { results[outputIndex++] = videoFrame; },
+        error: (e) => { console.error("Decoder error:", e); },
       });
 
       try {
-        decoder.configure({
-          codec: config.codec,
-          codedWidth: config.width,
-          codedHeight: config.height,
-        });
+        decoder.configure({ codec: config.codec, codedWidth: config.width, codedHeight: config.height });
 
         for (let i = 0; i < frames.length; i++) {
           const frame = frames[i];
           const data = frame.keyframe
-            ? DashcamMP4Class.concat(
-                sc,
-                frame.sps || config.sps,
-                sc,
-                frame.pps || config.pps,
-                sc,
-                frame.data
-              )
+            ? DashcamMP4Class.concat(sc, frame.sps || config.sps, sc, frame.pps || config.pps, sc, frame.data)
             : DashcamMP4Class.concat(sc, frame.data);
-
-          const chunk = new EncodedVideoChunk({
-            type: frame.keyframe ? "key" : "delta",
-            timestamp: i * 33333,
-            data,
-          });
-
-          decoder.decode(chunk);
+          decoder.decode(new EncodedVideoChunk({ type: frame.keyframe ? "key" : "delta", timestamp: i * 33333, data }));
         }
 
-        decoder.flush().then(() => {
-          decoder.close();
-          resolve(results);
-        }).catch(() => {
-          decoder.close();
-          resolve(results);
-        });
+        decoder.flush().then(() => { decoder.close(); resolve(results); })
+          .catch(() => { decoder.close(); resolve(results); });
       } catch (e) {
         console.error("Failed to decode frames:", e);
         resolve(results);
@@ -412,7 +304,6 @@ export function VideoExportDialog({
       const selected = getSelectedCameras();
       const layoutMode = getLayoutMode();
       const totalFrames = Math.max(...selected.map(c => c.frames.length));
-
       const sourceConfig = frontCamera.config!;
       const sourceWidth = sourceConfig.width;
       const sourceHeight = sourceConfig.height;
@@ -428,58 +319,28 @@ export function VideoExportDialog({
       let outputHeight: number;
 
       switch (layoutMode) {
-        case "single":
-          outputWidth = sourceWidth;
-          outputHeight = sourceHeight + hudHeight;
-          break;
-        case "dual-horizontal":
-          outputWidth = sourceWidth * 2;
-          outputHeight = sourceHeight + hudHeight;
-          break;
-        case "triple-horizontal":
-          outputWidth = sourceWidth * 3;
-          outputHeight = sourceHeight + hudHeight;
-          break;
-        case "quad":
-        default:
-          outputWidth = sourceWidth * 2;
-          outputHeight = sourceHeight * 2 + hudHeight;
-          break;
+        case "single": outputWidth = sourceWidth; outputHeight = sourceHeight + hudHeight; break;
+        case "dual-horizontal": outputWidth = sourceWidth * 2; outputHeight = sourceHeight + hudHeight; break;
+        case "triple-horizontal": outputWidth = sourceWidth * 3; outputHeight = sourceHeight + hudHeight; break;
+        default: outputWidth = sourceWidth * 2; outputHeight = sourceHeight * 2 + hudHeight; break;
       }
 
       outputWidth = Math.floor(outputWidth / 2) * 2;
       outputHeight = Math.floor(outputHeight / 2) * 2;
 
-      const maxWidth = 1920;
-      const maxHeight = 1080;
       let scale = 1;
-      if (outputWidth > maxWidth || outputHeight > maxHeight) {
-        scale = Math.min(maxWidth / outputWidth, maxHeight / outputHeight);
+      if (outputWidth > 1920 || outputHeight > 1080) {
+        scale = Math.min(1920 / outputWidth, 1080 / outputHeight);
         outputWidth = Math.floor((outputWidth * scale) / 2) * 2;
         outputHeight = Math.floor((outputHeight * scale) / 2) * 2;
       }
 
-      const codecProfiles = [
-        "avc1.640028",
-        "avc1.64001f",
-        "avc1.42e01f",
-        "avc1.42001f",
-      ];
-
+      const codecProfiles = ["avc1.640028", "avc1.64001f", "avc1.42e01f", "avc1.42001f"];
       let encoderConfig: VideoEncoderConfig | null = null;
       for (const codec of codecProfiles) {
-        const config = {
-          codec,
-          width: outputWidth,
-          height: outputHeight,
-          bitrate: 6_000_000,
-          framerate: 30,
-        };
+        const config = { codec, width: outputWidth, height: outputHeight, bitrate: 6_000_000, framerate: 30 };
         const support = await VideoEncoder.isConfigSupported(config);
-        if (support.supported) {
-          encoderConfig = config;
-          break;
-        }
+        if (support.supported) { encoderConfig = config; break; }
       }
 
       if (!encoderConfig) {
@@ -494,40 +355,21 @@ export function VideoExportDialog({
       const ctx = canvas.getContext("2d")!;
 
       const target = new ArrayBufferTarget();
-      const muxer = new Muxer({
-        target,
-        video: {
-          codec: "avc",
-          width: outputWidth,
-          height: outputHeight,
-        },
-        fastStart: "in-memory",
-      });
+      const muxer = new Muxer({ target, video: { codec: "avc", width: outputWidth, height: outputHeight }, fastStart: "in-memory" });
 
       let encoderError: Error | null = null;
       const encoder = new VideoEncoder({
-        output: (chunk, meta) => {
-          muxer.addVideoChunk(chunk, meta);
-        },
-        error: (e) => {
-          console.error("Encoder error:", e);
-          encoderError = e;
-        },
+        output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+        error: (e) => { console.error("Encoder error:", e); encoderError = e; },
       });
-
       encoder.configure(encoderConfig);
 
-      // -----------------------------------------------------------------------
-      // Map overlay setup (fetched once before the encoding loop)
-      // -----------------------------------------------------------------------
-
+      // Fetch map image once before the encode loop (if GPS + user opted in)
       let staticMapInfo: StaticMapInfo | null = null;
       let markerImg: HTMLImageElement | null = null;
 
-      if (canIncludeMap && includeMap) {
+      if (hasGpsData && includeMap) {
         setStatusText("Fetching map image...");
-
-        // Build GPS path from front camera SEI metadata
         const gpsPath = frontCamera.frames
           .map(f => f.sei)
           .filter((s): s is NonNullable<typeof s> => s !== null && s !== undefined)
@@ -537,33 +379,22 @@ export function VideoExportDialog({
 
         if (gpsPath.length > 0) {
           [staticMapInfo, markerImg] = await Promise.all([
-            fetchStaticMapImage(gpsPath, apiKey, MAP_W, MAP_H),
+            fetchStaticMapImage(gpsPath, MAP_W, MAP_H),
             loadImage(TESLA_MARKER_URL),
           ]);
         }
       }
 
-      // -----------------------------------------------------------------------
-      // Decode all frames
-      // -----------------------------------------------------------------------
-
       setStatusText("Decoding video frames...");
-
       const decodedCameras: Map<CameraAngle, (VideoFrame | null)[]> = new Map();
       for (const camera of selected) {
         if (camera.config) {
-          const decoded = await decodeAllFrames(camera.frames, camera.config);
-          decodedCameras.set(camera.angle, decoded);
+          decodedCameras.set(camera.angle, await decodeAllFrames(camera.frames, camera.config));
         }
       }
 
-      // -----------------------------------------------------------------------
-      // Encoding loop
-      // -----------------------------------------------------------------------
-
       setStatusText("Encoding video...");
       let timestamp = 0;
-
       const scaledSourceWidth = Math.floor(sourceWidth * scale);
       const scaledSourceHeight = Math.floor(sourceHeight * scale);
       const scaledHudHeight = Math.floor(hudHeight * scale);
@@ -574,34 +405,23 @@ export function VideoExportDialog({
         ctx.fillStyle = "#181818";
         ctx.fillRect(0, 0, outputWidth, outputHeight);
 
-        // Draw camera frames
         for (const camera of selected) {
-          const decodedFrames = decodedCameras.get(camera.angle);
-          const decodedFrame = decodedFrames?.[i];
-
+          const decodedFrame = decodedCameras.get(camera.angle)?.[i];
           if (decodedFrame) {
-            let dx: number, dy: number;
-
-            if (layoutMode === "single") {
-              dx = 0;
-              dy = 0;
-            } else if (layoutMode === "dual-horizontal") {
+            let dx = 0, dy = 0;
+            if (layoutMode === "dual-horizontal") {
               dx = camera.angle === "front" ? scaledSourceWidth : 0;
-              dy = 0;
             } else if (layoutMode === "triple-horizontal") {
-              const selectedAngles = selected.map((c: CameraData) => c.angle);
               const orderedAngles: CameraAngle[] = ["left", "front", "right", "rear"];
-              const sortedAngles = selectedAngles.slice().sort((a: CameraAngle, b: CameraAngle) =>
-                orderedAngles.indexOf(a) - orderedAngles.indexOf(b)
+              const sortedAngles = selected.map((c: CameraData) => c.angle).sort(
+                (a: CameraAngle, b: CameraAngle) => orderedAngles.indexOf(a) - orderedAngles.indexOf(b),
               );
               dx = sortedAngles.indexOf(camera.angle) * scaledSourceWidth;
-              dy = 0;
-            } else {
+            } else if (layoutMode === "quad") {
               const pos = CAMERA_GRID_POSITIONS[camera.angle];
               dx = pos.col * scaledSourceWidth;
               dy = pos.row * scaledSourceHeight;
             }
-
             ctx.drawImage(decodedFrame, dx, dy, scaledSourceWidth, scaledSourceHeight);
             decodedFrame.close();
           }
@@ -611,7 +431,6 @@ export function VideoExportDialog({
         const hudY = outputHeight - scaledHudHeight;
         drawTelemetryHUD(ctx, outputWidth, scaledHudHeight, hudY, metadata, i, totalFrames, primaryFilename);
 
-        // Draw map overlay if available and user opted in
         if (staticMapInfo && markerImg) {
           const lat = metadata?.latitudeDeg;
           const lng = metadata?.longitudeDeg;
@@ -621,26 +440,16 @@ export function VideoExportDialog({
         }
 
         const frameDuration = frameDurations[i] || 33.33;
-
-        const videoFrame = new VideoFrame(canvas, {
-          timestamp: timestamp * 1000,
-          duration: frameDuration * 1000,
-        });
-
+        const videoFrame = new VideoFrame(canvas, { timestamp: timestamp * 1000, duration: frameDuration * 1000 });
         encoder.encode(videoFrame, { keyFrame: i % 30 === 0 });
         videoFrame.close();
-
         timestamp += frameDuration;
         setProgress(Math.round((i / totalFrames) * 100));
 
-        while (encoder.encodeQueueSize > 5) {
-          await new Promise(r => setTimeout(r, 10));
-        }
+        while (encoder.encodeQueueSize > 5) await new Promise(r => setTimeout(r, 10));
       }
 
-      if (encoderError) {
-        throw encoderError;
-      }
+      if (encoderError) throw encoderError;
 
       setStatusText("Finalizing...");
       await encoder.flush();
@@ -669,25 +478,14 @@ export function VideoExportDialog({
       setIsExporting(false);
     }
   }, [
-    frontCamera,
-    getSelectedCameras,
-    getLayoutMode,
-    frameDurations,
-    drawTelemetryHUD,
-    decodeAllFrames,
-    primaryFilename,
-    onOpenChange,
-    canIncludeMap,
-    includeMap,
-    apiKey,
+    frontCamera, getSelectedCameras, getLayoutMode, frameDurations,
+    drawTelemetryHUD, decodeAllFrames, primaryFilename, onOpenChange,
+    hasGpsData, includeMap,
   ]);
 
   const handleCancel = useCallback(() => {
-    if (isExporting) {
-      abortRef.current = true;
-    } else {
-      onOpenChange(false);
-    }
+    if (isExporting) { abortRef.current = true; }
+    else { onOpenChange(false); }
   }, [isExporting, onOpenChange]);
 
   const selectedCount = Object.values(selectedCameras).filter(Boolean).length;
@@ -706,21 +504,11 @@ export function VideoExportDialog({
         </DialogHeader>
 
         <div className="py-4 space-y-4">
-          {/* Camera selection */}
           <div className="space-y-3">
             <div className="flex items-center space-x-3 opacity-70">
-              <Checkbox
-                id="camera-front"
-                checked={true}
-                disabled
-                data-testid="checkbox-camera-front"
-              />
-              <Label htmlFor="camera-front" className="text-white">
-                Front Camera (Required)
-              </Label>
-              {!frontCamera && (
-                <span className="text-xs text-red-400">Not loaded</span>
-              )}
+              <Checkbox id="camera-front" checked={true} disabled data-testid="checkbox-camera-front" />
+              <Label htmlFor="camera-front" className="text-white">Front Camera (Required)</Label>
+              {!frontCamera && <span className="text-xs text-red-400">Not loaded</span>}
             </div>
 
             {availableCameras.map(camera => (
@@ -739,8 +527,7 @@ export function VideoExportDialog({
             ))}
           </div>
 
-          {/* Map overlay option — only shown when GPS data & API key are available */}
-          {canIncludeMap && (
+          {hasGpsData && (
             <div className="border-t border-[#393C41] pt-3">
               <div className="flex items-center space-x-3">
                 <Checkbox
@@ -750,9 +537,7 @@ export function VideoExportDialog({
                   disabled={isExporting}
                   data-testid="checkbox-include-map"
                 />
-                <Label htmlFor="include-map" className="text-white">
-                  Include map overlay
-                </Label>
+                <Label htmlFor="include-map" className="text-white">Include map overlay</Label>
               </div>
               {includeMap && (
                 <p className="mt-1 ml-7 text-xs text-white/40">
@@ -762,7 +547,6 @@ export function VideoExportDialog({
             </div>
           )}
 
-          {/* Layout info */}
           <div className="text-xs text-white/50 space-y-1">
             <p>Layout: {getLayoutMode() === "single" ? "Single view" :
                        getLayoutMode() === "dual-horizontal" ? "Side by side (Other | Front)" :
