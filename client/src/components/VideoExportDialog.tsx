@@ -255,11 +255,6 @@ export function VideoExportDialog({
     ctx.fillStyle = hudColor;
     const accelText = `ACCEL ${formatAccelerator(metadata?.acceleratorPedalPosition)}`;
     ctx.fillText(accelText, x, centerY);
-    x += ctx.measureText(accelText).width + 15;
-
-    const gpsText = `${formatCoordinate(metadata?.latitudeDeg, true)} ${formatCoordinate(metadata?.longitudeDeg, false)}`;
-    ctx.fillStyle = hudColor;
-    ctx.fillText(gpsText, x, centerY);
 
     ctx.textAlign = "right";
     ctx.fillStyle = hudColor;
