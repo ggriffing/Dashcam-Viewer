@@ -41,9 +41,11 @@ function formatSpeed(mps: number | undefined): string {
 
 function formatHeading(deg: number | undefined): string {
   if (deg === undefined || deg === null) return "--";
+  // Normalise to 0–359 so negative headings (e.g. -91) display correctly
+  const normalized = ((deg % 360) + 360) % 360;
   const directions = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
-  const index = Math.round(deg / 45) % 8;
-  return `${Math.round(deg)}° ${directions[index]}`;
+  const index = Math.round(normalized / 45) % 8;
+  return `${Math.round(normalized)}° ${directions[index]}`;
 }
 
 function formatSteeringAngle(deg: number | undefined): string {

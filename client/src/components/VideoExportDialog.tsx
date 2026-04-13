@@ -61,8 +61,9 @@ function formatSpeed(mps: number | undefined): string {
 }
 function formatHeading(deg: number | undefined): string {
   if (deg === undefined || deg === null) return "--";
+  const normalized = ((deg % 360) + 360) % 360;
   const dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
-  return `${Math.round(deg)}° ${dirs[Math.round(deg / 45) % 8]}`;
+  return `${Math.round(normalized)}° ${dirs[Math.round(normalized / 45) % 8]}`;
 }
 function formatSteeringAngle(deg: number | undefined): string {
   if (deg === undefined || deg === null) return "--";
