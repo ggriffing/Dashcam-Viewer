@@ -44,6 +44,7 @@ export default function DashcamViewer() {
   const [primaryFilename, setPrimaryFilename] = useState<string>("");
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [gpsPath, setGpsPath] = useState<LatLng[]>([]);
+  const [mapKey, setMapKey] = useState(0);
 
   const videoGridRef = useRef<VideoGridHandle>(null);
   const playTimerRef = useRef<number | null>(null);
@@ -138,6 +139,7 @@ export default function DashcamViewer() {
           lng: f.sei?.longitudeDeg ?? 0,
         }));
         setGpsPath(path);
+        setMapKey((k) => k + 1);
 
         setTimeout(() => {
           videoGridRef.current?.renderAllFrames(startFrame);
@@ -375,7 +377,7 @@ export default function DashcamViewer() {
             </div>
 
             <MapView
-              key={primaryFilename}
+              key={mapKey}
               path={gpsPath}
               currentIndex={currentFrame}
             />

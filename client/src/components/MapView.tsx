@@ -64,7 +64,6 @@ export function MapView({ path, currentIndex }: MapViewProps) {
   const mapDivRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const markerRef = useRef<google.maps.Marker | null>(null);
-  const pathKeyRef = useRef<number>(0);
   const [isReady, setIsReady] = useState(false);
   const [loadError, setLoadError] = useState(false);
 
@@ -85,10 +84,6 @@ export function MapView({ path, currentIndex }: MapViewProps) {
 
   useEffect(() => {
     if (!isReady || !mapDivRef.current || validPath.length === 0) return;
-
-    const currentPathKey = path.length;
-    if (mapRef.current && pathKeyRef.current === currentPathKey) return;
-    pathKeyRef.current = currentPathKey;
 
     const initialPos =
       (path[currentIndex]?.lat !== 0 || path[currentIndex]?.lng !== 0
