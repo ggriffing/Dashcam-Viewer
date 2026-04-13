@@ -18,10 +18,6 @@ const BLUE = "#3B82F6";
 const RENDER_W = 180;
 const RENDER_H = Math.round(RENDER_W * SVG_H / SVG_W);
 
-const LABEL_STYLE: { color: string; background: string } = {
-  color: BLUE,
-  background: "rgba(0,0,0,0.6)",
-};
 
 function halfWidth(row: number): number {
   return 100 - row * 20;
@@ -112,14 +108,6 @@ export function FrontCameraOverlay({ metadata }: FrontCameraOverlayProps) {
         </g>
       </svg>
 
-      {state !== "coast" && (
-        <span
-          className="text-[9px] font-mono tracking-widest px-2 py-px rounded"
-          style={LABEL_STYLE}
-        >
-          {isBrake ? "BRAKE" : "ACCEL"}
-        </span>
-      )}
     </div>
   );
 }
