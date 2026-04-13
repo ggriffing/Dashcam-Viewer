@@ -384,9 +384,26 @@ export function parseFolderFiles(files: File[]): TeslaDriveData {
 
     if (parts.length <= catIdx + 1) continue;
 
+    const eventSegment = parts[catIdx + 1];
+
+    // If the segment immediately after the category is an MP4 filename, the
+    // clips live flat inside the category folder (no event subfolder).
+    // Extract the timestamp prefix from the filename to group cameras properly.
+    if (eventSegment.toLowerCase().endsWith(".mp4")) {
+      const tsMatch = FILENAME_TIMESTAMP_RE.exec(eventSegment);
+      if (tsMatch) {
+        rawEntries.push({ category: parts[catIdx], event: tsMatch[1], file });
+      }
+      continue;
+    }
+
+    // Check whether the segment after the event folder is the actual filename
+    // (expected: catIdx+2 is the filename, catIdx+1 is the event folder).
+    // If catIdx+2 doesn't exist but catIdx+1 matches a timestamp, we still
+    // treat catIdx+1 as the event folder and the current file belongs to it.
     rawEntries.push({
       category: parts[catIdx],
-      event: parts[catIdx + 1],
+      event: eventSegment,
       file,
     });
   }
