@@ -61,8 +61,9 @@ export function AccelerationChart({ frames, currentFrame, totalFrames, onSeek }:
       frames.some(f => f.sei?.linearAccelerationMps2Y !== undefined) ||
       frames.some(f => f.sei?.linearAccelerationMps2Z !== undefined);
 
+    const emptyPaths = { xLine: "", yLine: "", zLine: "", xArea: "", yArea: "", zArea: "" };
     if (!anyReal) {
-      return { xRaw, yRaw, zRaw, hasData: false, minVal: 0, maxVal: 0, zeroY: CHART_H / 2, paths: {} };
+      return { xRaw, yRaw, zRaw, hasData: false, minVal: 0, maxVal: 0, zeroY: CHART_H / 2, paths: emptyPaths };
     }
 
     const allVals = [...xRaw, ...yRaw, ...zRaw];
@@ -118,9 +119,10 @@ export function AccelerationChart({ frames, currentFrame, totalFrames, onSeek }:
   if (!hasData) return null;
 
   const n = Math.max(frames.length, 1);
-  const cursorX = (currentFrame / Math.max(n - 1, 1)) * VIEW_W;
+  const clampedFrame = Math.min(currentFrame, n - 1);
+  const cursorX = (clampedFrame / Math.max(n - 1, 1)) * VIEW_W;
 
-  const sei = frames[currentFrame]?.sei;
+  const sei = frames[clampedFrame]?.sei;
   const fmtAxis = (raw: number | null | undefined): string =>
     raw !== undefined && raw !== null ? raw.toFixed(2) : "--";
 
