@@ -5,7 +5,6 @@ import { TelemetryHUD } from "@/components/TelemetryHUD";
 import { MapView, type LatLng } from "@/components/MapView";
 import { TeslaDriveBrowser } from "@/components/TeslaDriveBrowser";
 import { VideoExportDialog } from "@/components/VideoExportDialog";
-import { EnergyFlowIndicator } from "@/components/EnergyFlowIndicator";
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
 import type { CameraAngle, VideoFrame, VideoConfig, SeiMetadataRaw, FieldInfo } from "@/lib/dashcam/types";
@@ -400,6 +399,7 @@ export default function DashcamViewer() {
                 ref={videoGridRef}
                 cameras={cameras}
                 currentFrame={currentFrame}
+                frontMetadata={currentMetadata}
               />
             </div>
 
@@ -422,8 +422,6 @@ export default function DashcamViewer() {
               onExportVideo={handleExportVideo}
               disabled={!hasVideos}
             />
-
-            <EnergyFlowIndicator metadata={currentMetadata} />
 
             <TelemetryHUD
               metadata={currentMetadata}

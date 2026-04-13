@@ -1,5 +1,6 @@
 import { useEffect, useRef, forwardRef, useImperativeHandle, useState, useCallback } from "react";
-import type { CameraAngle, VideoFrame, VideoConfig, DashcamMP4 } from "@/lib/dashcam/types";
+import type { CameraAngle, VideoFrame, VideoConfig, DashcamMP4, SeiMetadataRaw } from "@/lib/dashcam/types";
+import { FrontCameraOverlay } from "./FrontCameraOverlay";
 
 interface VideoPlayerProps {
   angle: CameraAngle;
@@ -7,6 +8,7 @@ interface VideoPlayerProps {
   config: VideoConfig | null;
   currentFrame: number;
   isActive: boolean;
+  overlayMetadata?: SeiMetadataRaw | null;
 }
 
 export interface VideoPlayerHandle {
@@ -22,7 +24,7 @@ const ANGLE_LABELS: Record<CameraAngle, string> = {
 };
 
 export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
-  function VideoPlayer({ angle, frames, config, currentFrame, isActive }, ref) {
+  function VideoPlayer({ angle, frames, config, currentFrame, isActive, overlayMetadata }, ref) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const decoderRef = useRef<VideoDecoder | null>(null);
     const decodingRef = useRef(false);
@@ -160,6 +162,9 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
         <div className="absolute top-2 left-2 px-2 py-1 bg-black/70 rounded text-xs font-mono text-[#00FF00]">
           {ANGLE_LABELS[angle]}
         </div>
+        {angle === "front" && isActive && (
+          <FrontCameraOverlay metadata={overlayMetadata ?? null} />
+        )}
         {!isActive && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/80">
             <span className="text-muted-foreground text-sm">No video loaded</span>
