@@ -1,3 +1,4 @@
+/// <reference types="@types/google.maps" />
 import { useEffect, useRef, useState } from "react";
 
 export interface LatLng {
@@ -20,7 +21,7 @@ declare global {
 
 function loadGoogleMapsApi(apiKey: string): Promise<void> {
   return new Promise((resolve) => {
-    if ((window as any).google?.maps) {
+    if (window.google?.maps) {
       resolve();
       return;
     }
@@ -45,7 +46,7 @@ function loadGoogleMapsApi(apiKey: string): Promise<void> {
   });
 }
 
-const DARK_STYLES = [
+const DARK_STYLES: google.maps.MapTypeStyle[] = [
   { elementType: "geometry", stylers: [{ color: "#1a1f2e" }] },
   { elementType: "labels.text.fill", stylers: [{ color: "#6b7280" }] },
   { elementType: "labels.text.stroke", stylers: [{ color: "#1a1f2e" }] },
@@ -65,12 +66,15 @@ const DARK_STYLES = [
 
 export function MapView({ path, currentIndex }: MapViewProps) {
   const mapDivRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<any>(null);
-  const markerRef = useRef<any>(null);
+  const mapRef = useRef<google.maps.Map | null>(null);
+  const markerRef = useRef<google.maps.Marker | null>(null);
   const pathKeyRef = useRef<number>(0);
   const [isReady, setIsReady] = useState(false);
 
-  const apiKey = import.meta.env.VITE_GOOGLE_API_KEY as string | undefined;
+  const apiKey = (
+    (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined) ||
+    (import.meta.env.VITE_GOOGLE_API_KEY as string | undefined)
+  );
 
   const validPath = path.filter((p) => p.lat !== 0 || p.lng !== 0);
   const hasGps = validPath.length > 0;
@@ -87,22 +91,23 @@ export function MapView({ path, currentIndex }: MapViewProps) {
     if (mapRef.current && pathKeyRef.current === currentPathKey) return;
     pathKeyRef.current = currentPathKey;
 
-    const google = (window as any).google;
+    const initialPos =
+      (path[currentIndex]?.lat !== 0 || path[currentIndex]?.lng !== 0
+        ? path[currentIndex]
+        : null) ?? validPath[0];
 
-    const initialPos = validPath[Math.min(currentIndex, validPath.length - 1)] ?? validPath[0];
-
-    const map = new google.maps.Map(mapDivRef.current, {
+    const map = new window.google.maps.Map(mapDivRef.current, {
       center: initialPos,
       zoom: 16,
       disableDefaultUI: true,
       zoomControl: true,
       zoomControlOptions: {
-        position: google.maps.ControlPosition.RIGHT_BOTTOM,
+        position: window.google.maps.ControlPosition.RIGHT_BOTTOM,
       },
       styles: DARK_STYLES,
     });
 
-    new google.maps.Polyline({
+    new window.google.maps.Polyline({
       path: validPath,
       geodesic: true,
       strokeColor: "#4A90E2",
@@ -117,11 +122,11 @@ export function MapView({ path, currentIndex }: MapViewProps) {
         ? currentPos
         : validPath[0];
 
-    const marker = new google.maps.Marker({
+    const marker = new window.google.maps.Marker({
       position: markerPos,
       map,
       icon: {
-        path: google.maps.SymbolPath.CIRCLE,
+        path: window.google.maps.SymbolPath.CIRCLE,
         scale: 8,
         fillColor: "#E82127",
         fillOpacity: 1,
@@ -131,8 +136,8 @@ export function MapView({ path, currentIndex }: MapViewProps) {
       zIndex: 100,
     });
 
-    const bounds = new google.maps.LatLngBounds();
-    validPath.forEach((p: LatLng) => bounds.extend(p));
+    const bounds = new window.google.maps.LatLngBounds();
+    validPath.forEach((p) => bounds.extend(p));
     map.fitBounds(bounds, { top: 24, right: 24, bottom: 24, left: 24 });
 
     mapRef.current = map;
