@@ -61,21 +61,19 @@ export const VideoGrid = forwardRef<VideoGridHandle, VideoGridProps>(
       >
         <div className={`flex ${hasRear ? 'flex-1 min-h-0' : 'w-full'}`}>
           {activeTopRowCameras.map((camera) => (
-            <div
-              key={camera.angle}
-              className="flex-1 min-w-0 relative"
-              style={hasRear ? undefined : { height: 0, paddingBottom: '75%' }}
-            >
-              <div className="absolute inset-0">
-                <VideoPlayer
-                  ref={setPlayerRef(camera.angle)}
-                  angle={camera.angle}
-                  frames={camera.frames}
-                  config={camera.config}
-                  currentFrame={currentFrame}
-                  isActive={camera.isActive}
-                  overlayMetadata={camera.angle === "front" ? frontMetadata : undefined}
-                />
+            <div key={camera.angle} className="flex-1 min-w-0">
+              <div className="relative w-full" style={{ aspectRatio: '4/3' }}>
+                <div className="absolute inset-0">
+                  <VideoPlayer
+                    ref={setPlayerRef(camera.angle)}
+                    angle={camera.angle}
+                    frames={camera.frames}
+                    config={camera.config}
+                    currentFrame={currentFrame}
+                    isActive={camera.isActive}
+                    overlayMetadata={camera.angle === "front" ? frontMetadata : undefined}
+                  />
+                </div>
               </div>
             </div>
           ))}
