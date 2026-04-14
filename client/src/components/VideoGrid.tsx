@@ -56,7 +56,7 @@ export const VideoGrid = forwardRef<VideoGridHandle, VideoGridProps>(
 
     return (
       <div 
-        className={`w-full flex flex-col bg-black ${hasRear ? 'h-full' : ''}`}
+        className={`w-full flex flex-col ${hasRear ? 'h-full' : ''}`}
         data-testid="video-grid"
       >
         <div className={`flex ${hasRear ? 'flex-1 min-h-0' : 'w-full'}`}>

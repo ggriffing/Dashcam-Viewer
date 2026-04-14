@@ -147,8 +147,7 @@ export function MapView({ path, currentIndex }: MapViewProps) {
   if (loadError) {
     return (
       <div
-        className="flex-shrink-0 w-full border-t border-[#393C41] bg-[#181818] flex items-center justify-center"
-        style={{ height: "180px" }}
+        className="w-full h-full border-t border-[#393C41] bg-[#181818] flex items-center justify-center"
         data-testid="map-error"
       >
         <span className="text-sm text-white/30">
@@ -160,8 +159,7 @@ export function MapView({ path, currentIndex }: MapViewProps) {
 
   return (
     <div
-      className="flex-shrink-0 w-full border-t border-[#393C41]"
-      style={{ height: "180px" }}
+      className="w-full h-full border-t border-[#393C41]"
     >
       <div
         ref={mapDivRef}

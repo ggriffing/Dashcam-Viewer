@@ -399,13 +399,15 @@ export default function DashcamViewer() {
               frontMetadata={currentMetadata}
             />
 
-            <div className="flex-1 min-h-0 overflow-hidden">
-              <MapView
-                key={mapKey}
-                path={gpsPath}
-                currentIndex={currentFrame}
-              />
-            </div>
+            {gpsPath.some((p) => p.lat !== 0 || p.lng !== 0) && (
+              <div className="flex-1 min-h-0 overflow-hidden" style={{ minHeight: 120 }}>
+                <MapView
+                  key={mapKey}
+                  path={gpsPath}
+                  currentIndex={currentFrame}
+                />
+              </div>
+            )}
 
             <PlaybackControls
               isPlaying={isPlaying}

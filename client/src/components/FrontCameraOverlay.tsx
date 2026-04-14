@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import type { SeiMetadataRaw } from "@/lib/dashcam/types";
 
 interface FrontCameraOverlayProps {
@@ -20,7 +21,7 @@ const RENDER_W = 100;
 const RENDER_H = Math.round(RENDER_W * SVG_H / SVG_W);
 
 const FLIP_TRANSFORM = `scale(1,-1) translate(0,${-SVG_H})`;
-const OVERLAY_STYLE: { paddingBottom: string } = { paddingBottom: "8%" };
+const OVERLAY_STYLE: React.CSSProperties = { paddingBottom: "8%" };
 
 function halfWidth(row: number): number {
   return 100 - row * 20;
@@ -74,20 +75,39 @@ function getState(m: SeiMetadataRaw): { state: DriveState; litCount: number } {
 }
 
 export function FrontCameraOverlay({ metadata }: FrontCameraOverlayProps) {
-  if (!metadata || !hasData(metadata)) return null;
+  const lastVisibleRef = useRef<{ state: DriveState; litCount: number } | null>(null);
 
-  const speed = metadata.vehicleSpeedMps ?? -1;
-  if (speed === 0) return null;
+  const noData = !metadata || !hasData(metadata);
+  const speed = metadata?.vehicleSpeedMps ?? -1;
 
-  const { state, litCount } = getState(metadata);
-  if (state === "coast") return null;
+  let visible = false;
+  let state: DriveState = "coast";
+  let litCount = 0;
 
-  const isBrake = state === "brake";
+  if (!noData && speed !== 0) {
+    const result = getState(metadata!);
+    state = result.state;
+    litCount = result.litCount;
+    if (state !== "coast") {
+      visible = true;
+      lastVisibleRef.current = { state, litCount };
+    }
+  }
+
+  const display = visible
+    ? { state, litCount }
+    : lastVisibleRef.current ?? { state: "accel" as DriveState, litCount: 0 };
+
+  const isBrake = display.state === "brake";
 
   return (
     <div
       className="absolute inset-0 flex items-end justify-center pointer-events-none"
-      style={OVERLAY_STYLE}
+      style={{
+        ...OVERLAY_STYLE,
+        opacity: visible ? 1 : 0,
+        transition: "opacity 120ms ease-out",
+      }}
     >
       <svg
         viewBox={`0 0 ${SVG_W} ${SVG_H}`}
@@ -103,7 +123,7 @@ export function FrontCameraOverlay({ metadata }: FrontCameraOverlayProps) {
               key={`blue-${row}`}
               d={d}
               fill={BLUE}
-              fillOpacity={row < litCount ? LIT_OPACITY : DIM_OPACITY}
+              fillOpacity={row < display.litCount ? LIT_OPACITY : DIM_OPACITY}
             />
           ))}
         </g>
