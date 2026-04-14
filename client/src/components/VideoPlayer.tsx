@@ -66,7 +66,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
             output: (frame) => {
               count++;
               if (count === target) {
-                ctx.drawImage(frame, 0, 0);
+                ctx.drawImage(frame, 0, 0, ctx.canvas.width, ctx.canvas.height);
               }
               frame.close();
               if (count >= target) resolve();

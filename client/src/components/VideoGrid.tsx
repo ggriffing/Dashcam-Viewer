@@ -64,17 +64,19 @@ export const VideoGrid = forwardRef<VideoGridHandle, VideoGridProps>(
             <div
               key={camera.angle}
               className="flex-1 min-w-0 relative"
-              style={{ aspectRatio: hasRear ? undefined : '4/3' }}
+              style={hasRear ? undefined : { height: 0, paddingBottom: '75%' }}
             >
-              <VideoPlayer
-                ref={setPlayerRef(camera.angle)}
-                angle={camera.angle}
-                frames={camera.frames}
-                config={camera.config}
-                currentFrame={currentFrame}
-                isActive={camera.isActive}
-                overlayMetadata={camera.angle === "front" ? frontMetadata : undefined}
-              />
+              <div className="absolute inset-0">
+                <VideoPlayer
+                  ref={setPlayerRef(camera.angle)}
+                  angle={camera.angle}
+                  frames={camera.frames}
+                  config={camera.config}
+                  currentFrame={currentFrame}
+                  isActive={camera.isActive}
+                  overlayMetadata={camera.angle === "front" ? frontMetadata : undefined}
+                />
+              </div>
             </div>
           ))}
         </div>
