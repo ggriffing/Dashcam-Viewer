@@ -20,7 +20,7 @@ const RENDER_W = 180;
 const RENDER_H = Math.round(RENDER_W * SVG_H / SVG_W);
 
 const COAST_BAR_X = 30;
-const COAST_BAR_Y = Math.round((SVG_H - 10) / 2);
+const COAST_BAR_Y = (SVG_H - 10) / 2;
 const COAST_BAR_W = 140;
 const COAST_BAR_H = 10;
 const COAST_BAR_RX = 5;
@@ -119,11 +119,11 @@ export function FrontCameraOverlay({ metadata }: FrontCameraOverlayProps) {
         ) : (
           <g transform={isBrake ? FLIP_TRANSFORM : undefined}>
             {PATHS.map((d, row) => (
-              <path key={row} d={d} fill="black" fillOpacity={SHADOW_OPACITY} />
+              <path key={`shadow-${row}`} d={d} fill="black" fillOpacity={SHADOW_OPACITY} />
             ))}
             {PATHS.map((d, row) => (
               <path
-                key={row}
+                key={`blue-${row}`}
                 d={d}
                 fill={BLUE}
                 fillOpacity={row < litCount ? LIT_OPACITY : DIM_OPACITY}
