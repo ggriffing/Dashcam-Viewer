@@ -19,13 +19,8 @@ const BLUE = "#3B82F6";
 const RENDER_W = 100;
 const RENDER_H = Math.round(RENDER_W * SVG_H / SVG_W);
 
-const COAST_W = 110;
-const COAST_H = 52;
-const COAST_X = (SVG_W - COAST_W) / 2;
-const COAST_Y = (SVG_H - COAST_H) / 2;
-const COAST_RX = 8;
-
 const FLIP_TRANSFORM = `scale(1,-1) translate(0,${-SVG_H})`;
+const OVERLAY_STYLE: { paddingBottom: string } = { paddingBottom: "8%" };
 
 function halfWidth(row: number): number {
   return 100 - row * 20;
@@ -85,51 +80,33 @@ export function FrontCameraOverlay({ metadata }: FrontCameraOverlayProps) {
   if (speed === 0) return null;
 
   const { state, litCount } = getState(metadata);
+  if (state === "coast") return null;
+
   const isBrake = state === "brake";
 
   return (
-    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-none">
+    <div
+      className="absolute inset-0 flex items-end justify-center pointer-events-none"
+      style={OVERLAY_STYLE}
+    >
       <svg
         viewBox={`0 0 ${SVG_W} ${SVG_H}`}
         width={RENDER_W}
         height={RENDER_H}
       >
-        {state === "coast" ? (
-          <>
-            <rect
-              x={COAST_X - 2}
-              y={COAST_Y - 2}
-              width={COAST_W + 4}
-              height={COAST_H + 4}
-              rx={COAST_RX + 2}
-              fill="black"
-              fillOpacity={0.5}
-            />
-            <rect
-              x={COAST_X}
-              y={COAST_Y}
-              width={COAST_W}
-              height={COAST_H}
-              rx={COAST_RX}
+        <g transform={isBrake ? FLIP_TRANSFORM : undefined}>
+          {PATHS.map((d, row) => (
+            <path key={`shadow-${row}`} d={d} fill="black" fillOpacity={SHADOW_OPACITY} />
+          ))}
+          {PATHS.map((d, row) => (
+            <path
+              key={`blue-${row}`}
+              d={d}
               fill={BLUE}
-              fillOpacity={0.85}
+              fillOpacity={row < litCount ? LIT_OPACITY : DIM_OPACITY}
             />
-          </>
-        ) : (
-          <g transform={isBrake ? FLIP_TRANSFORM : undefined}>
-            {PATHS.map((d, row) => (
-              <path key={`shadow-${row}`} d={d} fill="black" fillOpacity={SHADOW_OPACITY} />
-            ))}
-            {PATHS.map((d, row) => (
-              <path
-                key={`blue-${row}`}
-                d={d}
-                fill={BLUE}
-                fillOpacity={row < litCount ? LIT_OPACITY : DIM_OPACITY}
-              />
-            ))}
-          </g>
-        )}
+          ))}
+        </g>
       </svg>
     </div>
   );
