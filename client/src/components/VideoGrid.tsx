@@ -56,10 +56,10 @@ export const VideoGrid = forwardRef<VideoGridHandle, VideoGridProps>(
 
     return (
       <div 
-        className={`w-full flex flex-col ${hasRear ? 'h-full' : ''}`}
+        className="w-full flex flex-col"
         data-testid="video-grid"
       >
-        <div className={`flex ${hasRear ? 'flex-1 min-h-0' : 'w-full'}`}>
+        <div className="flex w-full">
           {activeTopRowCameras.map((camera) => (
             <div key={camera.angle} className="flex-1 min-w-0">
               <div className="relative w-full" style={{ aspectRatio: '4/3' }}>
@@ -79,17 +79,21 @@ export const VideoGrid = forwardRef<VideoGridHandle, VideoGridProps>(
           ))}
         </div>
         {hasRear && (
-          <div className="h-1/4 flex justify-center">
+          <div className="flex justify-center">
             <div className="w-1/3">
-              <VideoPlayer
-                key="rear"
-                ref={setPlayerRef("rear")}
-                angle="rear"
-                frames={rearCamera.frames}
-                config={rearCamera.config}
-                currentFrame={currentFrame}
-                isActive={rearCamera.isActive}
-              />
+              <div className="relative w-full" style={{ aspectRatio: '4/3' }}>
+                <div className="absolute inset-0">
+                  <VideoPlayer
+                    key="rear"
+                    ref={setPlayerRef("rear")}
+                    angle="rear"
+                    frames={rearCamera.frames}
+                    config={rearCamera.config}
+                    currentFrame={currentFrame}
+                    isActive={rearCamera.isActive}
+                  />
+                </div>
+              </div>
             </div>
           </div>
         )}
