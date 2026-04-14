@@ -391,23 +391,21 @@ export default function DashcamViewer() {
 
         {hasVideos && (
           <>
-            <div className="flex-1 min-h-0">
-              {/* Fix 3: key=videoLoadKey forces a fresh VideoGrid (and clean
-                  VideoDecoders) every time a new event is loaded. */}
-              <VideoGrid
-                key={videoLoadKey}
-                ref={videoGridRef}
-                cameras={cameras}
-                currentFrame={currentFrame}
-                frontMetadata={currentMetadata}
+            <VideoGrid
+              key={videoLoadKey}
+              ref={videoGridRef}
+              cameras={cameras}
+              currentFrame={currentFrame}
+              frontMetadata={currentMetadata}
+            />
+
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <MapView
+                key={mapKey}
+                path={gpsPath}
+                currentIndex={currentFrame}
               />
             </div>
-
-            <MapView
-              key={mapKey}
-              path={gpsPath}
-              currentIndex={currentFrame}
-            />
 
             <PlaybackControls
               isPlaying={isPlaying}
