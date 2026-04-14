@@ -14,10 +14,18 @@ const SVG_H = ROW_H * N_ROWS - GAP;
 const CX = SVG_W / 2;
 const LIT_OPACITY = 1;
 const DIM_OPACITY = 0.15;
+const SHADOW_OPACITY = 0.55;
 const BLUE = "#3B82F6";
 const RENDER_W = 180;
 const RENDER_H = Math.round(RENDER_W * SVG_H / SVG_W);
 
+const COAST_BAR_X = 30;
+const COAST_BAR_Y = Math.round((SVG_H - 10) / 2);
+const COAST_BAR_W = 140;
+const COAST_BAR_H = 10;
+const COAST_BAR_RX = 5;
+
+const FLIP_TRANSFORM = `scale(1,-1) translate(0,${-SVG_H})`;
 
 function halfWidth(row: number): number {
   return 100 - row * 20;
@@ -37,7 +45,6 @@ function makeUpPath(row: number): string {
 }
 
 const PATHS = Array.from({ length: N_ROWS }, (_, i) => makeUpPath(i));
-const FLIP_TRANSFORM = `scale(1,-1) translate(0,${-SVG_H})`;
 
 function accelToLit(ax: number): number {
   const a = Math.abs(ax);
@@ -81,33 +88,50 @@ export function FrontCameraOverlay({ metadata }: FrontCameraOverlayProps) {
   const isBrake = state === "brake";
 
   return (
-    <div className="absolute bottom-8 left-1/2 -translate-x-1/2 pointer-events-none flex flex-col items-center gap-0.5">
+    <div className="absolute bottom-8 left-1/2 -translate-x-1/2 pointer-events-none">
       <svg
         viewBox={`0 0 ${SVG_W} ${SVG_H}`}
         width={RENDER_W}
         height={RENDER_H}
         overflow="visible"
       >
-        <rect
-          x={4} y={4}
-          width={SVG_W - 8} height={SVG_H - 8}
-          rx={6}
-          fill="black"
-          fillOpacity={0.5}
-        />
-
-        <g transform={isBrake ? FLIP_TRANSFORM : undefined}>
-          {PATHS.map((d, row) => (
-            <path
-              key={row}
-              d={d}
-              fill={BLUE}
-              fillOpacity={row < litCount ? LIT_OPACITY : DIM_OPACITY}
+        {state === "coast" ? (
+          <>
+            <rect
+              x={COAST_BAR_X - 2}
+              y={COAST_BAR_Y - 2}
+              width={COAST_BAR_W + 4}
+              height={COAST_BAR_H + 4}
+              rx={COAST_BAR_RX + 2}
+              fill="black"
+              fillOpacity={0.5}
             />
-          ))}
-        </g>
+            <rect
+              x={COAST_BAR_X}
+              y={COAST_BAR_Y}
+              width={COAST_BAR_W}
+              height={COAST_BAR_H}
+              rx={COAST_BAR_RX}
+              fill={BLUE}
+              fillOpacity={0.85}
+            />
+          </>
+        ) : (
+          <g transform={isBrake ? FLIP_TRANSFORM : undefined}>
+            {PATHS.map((d, row) => (
+              <path key={row} d={d} fill="black" fillOpacity={SHADOW_OPACITY} />
+            ))}
+            {PATHS.map((d, row) => (
+              <path
+                key={row}
+                d={d}
+                fill={BLUE}
+                fillOpacity={row < litCount ? LIT_OPACITY : DIM_OPACITY}
+              />
+            ))}
+          </g>
+        )}
       </svg>
-
     </div>
   );
 }
