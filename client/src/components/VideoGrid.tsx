@@ -19,6 +19,34 @@ export interface VideoGridHandle {
   renderAllFrames: (frameIndex: number) => Promise<void>;
 }
 
+function CameraCell({
+  camera,
+  currentFrame,
+  overlayMetadata,
+  playerRef,
+}: {
+  camera: CameraData;
+  currentFrame: number;
+  overlayMetadata?: SeiMetadataRaw | null;
+  playerRef: (handle: VideoPlayerHandle | null) => void;
+}) {
+  return (
+    <div style={{ aspectRatio: '4/3', position: 'relative', width: '100%' }}>
+      <div style={{ position: 'absolute', inset: 0 }}>
+        <VideoPlayer
+          ref={playerRef}
+          angle={camera.angle}
+          frames={camera.frames}
+          config={camera.config}
+          currentFrame={currentFrame}
+          isActive={camera.isActive}
+          overlayMetadata={overlayMetadata}
+        />
+      </div>
+    </div>
+  );
+}
+
 export const VideoGrid = forwardRef<VideoGridHandle, VideoGridProps>(
   function VideoGrid({ cameras, currentFrame, frontMetadata }, ref) {
     const playerRefs = useRef<Map<CameraAngle, VideoPlayerHandle>>(new Map());
@@ -34,16 +62,11 @@ export const VideoGrid = forwardRef<VideoGridHandle, VideoGridProps>(
       await Promise.all(promises);
     }, [cameras]);
 
-    useImperativeHandle(ref, () => ({
-      renderAllFrames,
-    }));
+    useImperativeHandle(ref, () => ({ renderAllFrames }));
 
     const setPlayerRef = useCallback((angle: CameraAngle) => (handle: VideoPlayerHandle | null) => {
-      if (handle) {
-        playerRefs.current.set(angle, handle);
-      } else {
-        playerRefs.current.delete(angle);
-      }
+      if (handle) playerRefs.current.set(angle, handle);
+      else playerRefs.current.delete(angle);
     }, []);
 
     const topRowAngles: CameraAngle[] = ["left", "front", "right"];
@@ -55,47 +78,36 @@ export const VideoGrid = forwardRef<VideoGridHandle, VideoGridProps>(
       .filter((camera): camera is CameraData => camera?.isActive ?? false);
 
     return (
-      <div 
-        className="w-full flex flex-col"
+      <div
+        className="w-full"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr 1fr',
+          alignItems: 'start',
+        }}
         data-testid="video-grid"
       >
-        <div className="flex w-full">
-          {activeTopRowCameras.map((camera) => (
-            <div key={camera.angle} className="flex-1 min-w-0">
-              <div className="relative w-full" style={{ aspectRatio: '4/3' }}>
-                <div className="absolute inset-0">
-                  <VideoPlayer
-                    ref={setPlayerRef(camera.angle)}
-                    angle={camera.angle}
-                    frames={camera.frames}
-                    config={camera.config}
-                    currentFrame={currentFrame}
-                    isActive={camera.isActive}
-                    overlayMetadata={camera.angle === "front" ? frontMetadata : undefined}
-                  />
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+        {activeTopRowCameras.map((camera) => (
+          <CameraCell
+            key={camera.angle}
+            camera={camera}
+            currentFrame={currentFrame}
+            overlayMetadata={camera.angle === "front" ? frontMetadata : undefined}
+            playerRef={setPlayerRef(camera.angle)}
+          />
+        ))}
+
         {hasRear && (
-          <div className="flex justify-center items-start">
-            <div className="w-1/3">
-              <div className="relative w-full" style={{ aspectRatio: '4/3' }}>
-                <div className="absolute inset-0">
-                  <VideoPlayer
-                    key="rear"
-                    ref={setPlayerRef("rear")}
-                    angle="rear"
-                    frames={rearCamera.frames}
-                    config={rearCamera.config}
-                    currentFrame={currentFrame}
-                    isActive={rearCamera.isActive}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
+          <>
+            <div />
+            <CameraCell
+              key="rear"
+              camera={rearCamera}
+              currentFrame={currentFrame}
+              playerRef={setPlayerRef("rear")}
+            />
+            <div />
+          </>
         )}
       </div>
     );
