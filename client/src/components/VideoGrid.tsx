@@ -79,7 +79,7 @@ export const VideoGrid = forwardRef<VideoGridHandle, VideoGridProps>(
           ))}
         </div>
         {hasRear && (
-          <div className="flex justify-center">
+          <div className="flex justify-center items-start">
             <div className="w-1/3">
               <div className="relative w-full" style={{ aspectRatio: '4/3' }}>
                 <div className="absolute inset-0">
