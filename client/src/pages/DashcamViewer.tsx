@@ -429,7 +429,6 @@ export default function DashcamViewer() {
               totalFrames={totalFrames}
               currentTime={getCurrentTime()}
               duration={getCurrentDuration()}
-              filename={primaryFilename}
             />
           </>
         )}

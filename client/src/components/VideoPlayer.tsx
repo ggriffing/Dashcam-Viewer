@@ -152,7 +152,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
 
     return (
       <div 
-        className="relative w-full h-full bg-black rounded-md overflow-hidden"
+        className="relative w-full h-full bg-black overflow-hidden"
         data-testid={`video-player-${angle}`}
       >
         <canvas

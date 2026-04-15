@@ -16,7 +16,6 @@ interface TelemetryHUDProps {
   totalFrames: number;
   currentTime: number;
   duration: number;
-  filename?: string;
 }
 
 const GEAR_LABELS: Record<number, string> = {
@@ -71,7 +70,6 @@ export function TelemetryHUD({
   totalFrames,
   currentTime,
   duration,
-  filename,
 }: TelemetryHUDProps) {
   const gear = metadata?.gearState !== undefined ? GEAR_LABELS[metadata.gearState] || "--" : "--";
   const autopilot = metadata?.autopilotState !== undefined ? AUTOPILOT_LABELS[metadata.autopilotState] || "OFF" : "OFF";
@@ -176,13 +174,6 @@ export function TelemetryHUD({
             </span>
           </div>
 
-          {filename && (
-            <div className="max-w-[200px] truncate">
-              <span className="font-mono text-xs text-[#00FF00]/50" data-testid="text-filename">
-                {filename}
-              </span>
-            </div>
-          )}
         </div>
       </div>
     </div>
