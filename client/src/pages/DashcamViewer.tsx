@@ -344,31 +344,6 @@ export default function DashcamViewer() {
 
   return (
     <div className="h-screen flex flex-col bg-[#181818] overflow-hidden">
-      {!hasVideos && (
-        <header className="flex-shrink-0 flex items-center justify-between px-4 py-3 bg-black border-b border-[#393C41]">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 flex items-center justify-center">
-              <svg 
-                viewBox="0 0 32 32" 
-                className="w-6 h-6 text-[#E82127]"
-                fill="currentColor"
-              >
-                <path d="M16 0L3 8v16l13 8 13-8V8L16 0zm0 4l9 5.5v11L16 26l-9-5.5v-11L16 4z"/>
-                <path d="M16 10l-4 2.5v5l4 2.5 4-2.5v-5L16 10z"/>
-              </svg>
-            </div>
-            <div>
-              <h1 className="text-lg font-semibold text-white tracking-tight">
-                Tesla Dashcam Viewer
-              </h1>
-              <p className="text-xs text-white/50">
-                Multi-angle synchronized footage with telemetry
-              </p>
-            </div>
-          </div>
-        </header>
-      )}
-
       <main className="flex-1 min-h-0 flex flex-col">
         {/* Fix 2: Always mounted so driveData persists between event loads.
             Hidden with CSS when videos are active; no state is lost. */}
