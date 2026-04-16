@@ -164,32 +164,62 @@ export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayPr
         const driveState = stateRef.current;
         const g = geomRef.current;
 
+        ctx.save();
+        drawTrap(ctx, g, lateral);
+        ctx.clip();
+
         if (driveState === "coast") {
           ctx.fillStyle = BLUE;
           ctx.globalAlpha = 0.55;
-          drawTrap(ctx, g, lateral);
           ctx.fill();
         } else {
           const slotH = g.h / N_ARROWS;
-          const arrowH = slotH * ARROW_FILL_RATIO;
+          const gapH = slotH * (1 - ARROW_FILL_RATIO);
           const period = slotH;
           const offset = ((scrollRef.current % period) + period) % period;
           const pointUp = driveState === "brake";
 
           ctx.fillStyle = BLUE;
           ctx.globalAlpha = 1.0;
+          ctx.fillRect(0, 0, CVS_W, CVS_H);
 
-          ctx.save();
-          drawTrap(ctx, g, lateral);
-          ctx.clip();
-
+          ctx.fillStyle = "#0a0f1a";
+          ctx.globalAlpha = 1.0;
           for (let i = -2; i < N_ARROWS + 3; i++) {
             const slotTop = g.topY + i * period - offset;
-            const arrowTop = slotTop + (slotH - arrowH) / 2;
-            drawArrow(ctx, g, arrowTop, arrowH, lateral, pointUp);
+            const gapTop = slotTop + slotH - gapH / 2;
+            const gapBot = gapTop + gapH;
+
+            const cTop = Math.max(g.topY, Math.min(g.botY, gapTop));
+            const cBot = Math.max(g.topY, Math.min(g.botY, gapBot));
+            if (cBot - cTop < 0.5) continue;
+
+            const tTop = (cTop - g.topY) / g.h;
+            const tBot = (cBot - g.topY) / g.h;
+            const hwTop = hwAt(g, tTop);
+            const hwBot = hwAt(g, tBot);
+            const sTop2 = sAt(tTop, lateral);
+            const sBot2 = sAt(tBot, lateral);
+
+            ctx.beginPath();
+            ctx.moveTo(CX - hwTop + sTop2, cTop);
+            ctx.lineTo(CX + hwTop + sTop2, cTop);
+            ctx.lineTo(CX + hwBot + sBot2, cBot);
+            ctx.lineTo(CX - hwBot + sBot2, cBot);
+            ctx.closePath();
+            ctx.fill();
           }
-          ctx.restore();
+
+          ctx.fillStyle = "#7fc0ff";
+          ctx.globalAlpha = 0.25;
+          for (let i = -2; i < N_ARROWS + 3; i++) {
+            const slotTop = g.topY + i * period - offset;
+            const arrowTop = slotTop + gapH / 2;
+            drawArrow(ctx, g, arrowTop, slotH - gapH, lateral, pointUp);
+          }
         }
+
+        ctx.restore();
       }
 
       ctx.globalAlpha = 1;
