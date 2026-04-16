@@ -8,28 +8,33 @@ interface FrontCameraOverlayProps {
 
 const SVG_W  = 520;
 const CX     = SVG_W / 2;
-const SVG_H  = 130;
+const SVG_H  = 150;
 const TILE_H = SVG_H;
 
-const HW    = 200;
-const CH    = 14;
-const THICK = 6;
-const SHADOW_DY = 4;
-const ROW_Y = [10, 40, 70, 100] as const;
+const HW    = 220;
+const CH    = 4;
+const THICK = 14;
+const N_ROWS = 5;
+const SHADOW_DY = 3;
+
+const ROW_SPACING = 27;
+const ROW_START   = 5;
+const ROW_Y: number[] = [];
+for (let i = 0; i < N_ROWS; i++) ROW_Y.push(ROW_START + i * ROW_SPACING);
 
 function makeChevronDown(hw: number, ch: number, thick: number, y: number): string {
   const tipInner = Math.round(thick * ch / hw);
   return (
     `M${CX - hw},${y} L${CX},${y + ch} L${CX + hw},${y}` +
-    ` L${CX + hw},${y + thick} L${CX},${y + ch - tipInner} L${CX - hw},${y + thick}Z`
+    ` L${CX + hw},${y + thick} L${CX},${y + ch + thick - tipInner} L${CX - hw},${y + thick}Z`
   );
 }
 
 function makeChevronUp(hw: number, ch: number, thick: number, y: number): string {
   const tipInner = Math.round(thick * ch / hw);
   return (
-    `M${CX - hw},${y + ch} L${CX},${y} L${CX + hw},${y + ch}` +
-    ` L${CX + hw},${y + ch - thick} L${CX},${y + tipInner} L${CX - hw},${y + ch - thick}Z`
+    `M${CX - hw},${y + ch + thick} L${CX},${y + thick} L${CX + hw},${y + ch + thick}` +
+    ` L${CX + hw},${y + ch} L${CX},${y + tipInner} L${CX - hw},${y + ch}Z`
   );
 }
 
@@ -42,7 +47,7 @@ const TILED_UP_SHADOW: string[]   = [];
 
 for (let tile = 0; tile < N_TILES; tile++) {
   const dy = tile * TILE_H;
-  for (let i = 0; i < ROW_Y.length; i++) {
+  for (let i = 0; i < N_ROWS; i++) {
     const y = ROW_Y[i] + dy;
     TILED_DOWN_MAIN.push(makeChevronDown(HW, CH, THICK, y));
     TILED_DOWN_SHADOW.push(makeChevronDown(HW, CH, THICK, y + SHADOW_DY));
@@ -56,12 +61,12 @@ const ACCEL_COLOR  = "#F59E0B";
 const GREY_COLOR   = "#888888";
 const SHADOW_COLOR = "#0F2444";
 
-const MAX_FILL_OP   = 0.92;
-const MIN_FILL_OP   = 0.42;
-const MAX_SHADOW_OP = 0.65;
-const MIN_SHADOW_OP = 0.12;
+const MAX_FILL_OP   = 0.85;
+const MIN_FILL_OP   = 0.50;
+const MAX_SHADOW_OP = 0.55;
+const MIN_SHADOW_OP = 0.10;
 
-const SCROLL_SCALE  = 22;
+const SCROLL_SCALE  = 28;
 const LATERAL_SCALE = 8;
 const LATERAL_MAX   = 28;
 
@@ -110,8 +115,6 @@ function getState(m: SeiMetadataRaw): { state: DriveState; litCount: number; ax:
   }
   return { state: "coast", litCount: 0, ax: 0 };
 }
-
-const OVERLAY_STYLE: React.CSSProperties = { paddingBottom: "8%" };
 
 export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayProps) {
   const uid = useId();
@@ -202,17 +205,23 @@ export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayPr
       )}
 
       <div
-        className="absolute inset-0 flex items-end justify-center"
+        className="absolute inset-x-0 bottom-0 flex justify-center"
         style={{
-          ...OVERLAY_STYLE,
+          paddingBottom: "4%",
           opacity: visible ? 1 : 0,
           transition: "opacity 120ms ease-out",
+          perspective: "350px",
         }}
       >
         <svg
           viewBox={`0 0 ${SVG_W} ${SVG_H}`}
           width="62%"
-          style={{ display: "block", overflow: "hidden" }}
+          style={{
+            display: "block",
+            overflow: "hidden",
+            transform: "rotateX(40deg)",
+            transformOrigin: "center bottom",
+          }}
         >
           <defs>
             <clipPath id={clipId}>
