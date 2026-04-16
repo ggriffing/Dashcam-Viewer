@@ -366,7 +366,7 @@ export default function DashcamViewer() {
             />
 
             {gpsPath.some((p) => p.lat !== 0 || p.lng !== 0) && (
-              <div className="flex-1 min-h-0 overflow-hidden" style={{ minHeight: 120 }}>
+              <div className="flex-1 min-h-0 overflow-hidden" style={{ minHeight: 120, marginTop: 0 }}>
                 <MapView
                   key={mapKey}
                   path={gpsPath}

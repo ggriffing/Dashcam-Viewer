@@ -83,11 +83,12 @@ export const VideoGrid = forwardRef<VideoGridHandle, VideoGridProps>(
 
     return (
       <div
-        className="w-full"
+        className="w-full flex-shrink-0"
         style={{
           display: 'grid',
           gridTemplateColumns: '1fr 1fr 1fr',
           alignItems: 'start',
+          alignContent: 'start',
         }}
         data-testid="video-grid"
       >
