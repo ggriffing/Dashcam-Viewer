@@ -28,7 +28,7 @@ const MAX_H = 180;
 const SPEED_FOR_MAX = 30;
 
 const N_STRIPES = 7;
-const GAP_RATIO = 0.45;
+const GAP_RATIO = 0.55;
 const SCROLL_SCALE = 40;
 const LATERAL_SCALE = 0.05;
 const LATERAL_MAX = 0.22;
@@ -127,7 +127,7 @@ function drawChevronStripe(
     ctx.lineTo(CX + hw2 + s2, y2);
     ctx.lineTo(CX - hw2 + s2, y2);
   } else {
-    const dip = (y2 - y1) * 0.28 * dipDir;
+    const dip = (y2 - y1) * 0.75 * dipDir;
     const midY = (y1 + y2) / 2 + dip;
     const tMid = clamp01((midY - g.topY) / g.h);
     const hwM = hwAt(g, tMid);
