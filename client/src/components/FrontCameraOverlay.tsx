@@ -17,7 +17,7 @@ const SVG_H = ROW_H * N_ROWS + VPAD;
 const CX = SVG_W / 2;
 
 const BLUE = "#3B82F6";
-const LIT_OPACITY = 1;
+const LIT_OPACITY = 0.75;
 const DIM_OPACITY = 0.12;
 const SHADOW_OPACITY = 0.55;
 
