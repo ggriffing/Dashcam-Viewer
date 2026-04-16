@@ -121,9 +121,9 @@ function drawChevron(
   const sApex = sAt(tApex, lateral);
   const sWing = sAt(tWing, lateral);
 
-  // Arm thickness: 38% of arrowH in Y, 30% of wing half-width in X
-  const armY = arrowH * 0.38;
-  const armX = hwWing * 0.30;
+  // Arm thickness: 55% of arrowH in Y, 42% of wing half-width in X
+  const armY = arrowH * 0.55;
+  const armX = hwWing * 0.42;
 
   const innerApexYraw = pointUp ? apexY + armY : apexY - armY;
   const cInnerApex = Math.max(g.topY, Math.min(g.botY, innerApexYraw));
@@ -192,7 +192,7 @@ export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayPr
           const arrowH = slotH * ARROW_FILL_RATIO;
           const period = slotH;
           const offset = ((scrollRef.current % period) + period) % period;
-          const pointUp = driveState === "brake";
+          const pointUp = driveState === "accel";
 
           // Semi-transparent blue base — road shows through in gaps between arrows
           ctx.fillStyle = BLUE;
@@ -241,7 +241,7 @@ export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayPr
   visibleRef.current = visible;
   stateRef.current = state;
   geomRef.current = computeTrapGeom(speed, ax);
-  targetVelRef.current = (visible && isPlaying && state !== "coast") ? -ax * SCROLL_SCALE : 0;
+  targetVelRef.current = (visible && isPlaying && state !== "coast") ? ax * SCROLL_SCALE : 0;
   lateralRef.current = Math.max(-LATERAL_MAX, Math.min(LATERAL_MAX, ay * LATERAL_SCALE));
 
   const autopilotState = metadata?.autopilotState ?? 0;
