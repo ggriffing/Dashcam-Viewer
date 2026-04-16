@@ -15,7 +15,7 @@ const AUTOPILOT_LABELS: Record<number, string> = {
 const BLUE = "#3B8EEA";
 
 const CVS_W = 440;
-const CVS_H = 200;
+const CVS_H = 250;
 const CX = CVS_W / 2;
 
 const BOT_Y = 195;
@@ -154,6 +154,7 @@ export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayPr
   const stateRef = useRef<DriveState>("coast");
   const geomRef = useRef<TrapGeom>(computeTrapGeom(0, 0));
   const visibleRef = useRef(false);
+  const speedMphRef = useRef(0);
   const rafRef = useRef<number | null>(null);
   const lastTimeRef = useRef<number | null>(null);
 
@@ -210,6 +211,19 @@ export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayPr
         }
 
         ctx.restore();
+
+        // Speed text centered at bottom of trapezoid
+        const g2 = geomRef.current;
+        const mph = speedMphRef.current;
+        const textY = g2.botY + 28;
+        ctx.globalAlpha = 1.0;
+        ctx.font = "bold 44px system-ui, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "alphabetic";
+        ctx.fillStyle = "#000000";
+        ctx.fillText(String(mph), CX + 3, textY + 3);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText(String(mph), CX, textY);
       }
 
       ctx.globalAlpha = 1;
@@ -241,6 +255,7 @@ export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayPr
   visibleRef.current = visible;
   stateRef.current = state;
   geomRef.current = computeTrapGeom(speed, ax);
+  speedMphRef.current = Math.round(speed * 2.23694);
   targetVelRef.current = (visible && isPlaying && state !== "coast") ? ax * SCROLL_SCALE : 0;
   lateralRef.current = Math.max(-LATERAL_MAX, Math.min(LATERAL_MAX, ay * LATERAL_SCALE));
 
