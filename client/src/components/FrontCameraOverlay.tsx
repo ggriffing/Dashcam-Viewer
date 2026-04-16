@@ -5,50 +5,40 @@ interface FrontCameraOverlayProps {
   metadata: SeiMetadataRaw | null;
 }
 
-const N_ROWS = 5;
-const CHEV_H = 11;
-const THICK = 4;
-const GAP = 1;
-const ROW_H = CHEV_H + THICK + GAP;
-const SVG_W = 200;
-const SVG_H = ROW_H * N_ROWS - GAP;
+const N_ROWS = 4;
+const SVG_W = 360;
+const HW = 130;          // half-width of each chevron arm
+const CHEV_H = 44;       // vertical drop from wings to point
+const STROKE_W = 18;     // arm stroke width (road-marking weight)
+const SHADOW_EXTRA = 6;  // extra width added to shadow stroke
+const GAP = 10;          // gap between stacked chevron rows
+const ROW_STEP = CHEV_H + GAP;
+const VPAD = 12;         // vertical padding so stroke tips aren't clipped
+const SVG_H = N_ROWS * ROW_STEP + VPAD * 2;
 const CX = SVG_W / 2;
-const LIT_OPACITY = 1;
-const DIM_OPACITY = 0.15;
-const SHADOW_OPACITY = 0.55;
+
 const BLUE = "#3B82F6";
-const RENDER_W = 100;
-const RENDER_H = Math.round(RENDER_W * SVG_H / SVG_W);
+const LIT_OPACITY = 0.82;
+const DIM_OPACITY = 0.10;
+const SHADOW_OPACITY = 0.55;
 
 const FLIP_TRANSFORM = `scale(1,-1) translate(0,${-SVG_H})`;
 const OVERLAY_STYLE: React.CSSProperties = { paddingBottom: "8%" };
 
-function halfWidth(row: number): number {
-  return 100 - row * 20;
+function makeChevronPath(row: number): string {
+  const yWings = VPAD + (N_ROWS - 1 - row) * ROW_STEP;
+  const yPoint = yWings + CHEV_H;
+  return `M${CX - HW},${yWings} L${CX},${yPoint} L${CX + HW},${yWings}`;
 }
 
-function makeUpPath(row: number): string {
-  const hw = halfWidth(row);
-  const yP = (N_ROWS - 1 - row) * ROW_H;
-  return (
-    `M${CX - hw},${yP + CHEV_H}` +
-    ` L${CX},${yP}` +
-    ` L${CX + hw},${yP + CHEV_H}` +
-    ` L${CX + hw},${yP + CHEV_H + THICK}` +
-    ` L${CX},${yP + THICK}` +
-    ` L${CX - hw},${yP + CHEV_H + THICK}Z`
-  );
-}
-
-const PATHS = Array.from({ length: N_ROWS }, (_, i) => makeUpPath(i));
+const PATHS = Array.from({ length: N_ROWS }, (_, i) => makeChevronPath(i));
 
 function accelToLit(ax: number): number {
   const a = Math.abs(ax);
-  if (a < 1) return 1;
-  if (a < 2) return 2;
-  if (a < 4) return 3;
-  if (a < 6) return 4;
-  return 5;
+  if (a < 0.5) return 1;
+  if (a < 1.5) return 2;
+  if (a < 3.0) return 3;
+  return 4;
 }
 
 function hasData(m: SeiMetadataRaw): boolean {
@@ -111,19 +101,32 @@ export function FrontCameraOverlay({ metadata }: FrontCameraOverlayProps) {
     >
       <svg
         viewBox={`0 0 ${SVG_W} ${SVG_H}`}
-        width={RENDER_W}
-        height={RENDER_H}
+        width="48%"
+        style={{ display: "block" }}
       >
         <g transform={isBrake ? FLIP_TRANSFORM : undefined}>
           {PATHS.map((d, row) => (
-            <path key={`shadow-${row}`} d={d} fill="black" fillOpacity={SHADOW_OPACITY} />
+            <path
+              key={`shadow-${row}`}
+              d={d}
+              fill="none"
+              stroke="black"
+              strokeWidth={STROKE_W + SHADOW_EXTRA}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+              strokeOpacity={SHADOW_OPACITY}
+            />
           ))}
           {PATHS.map((d, row) => (
             <path
               key={`blue-${row}`}
               d={d}
-              fill={BLUE}
-              fillOpacity={row < display.litCount ? LIT_OPACITY : DIM_OPACITY}
+              fill="none"
+              stroke={BLUE}
+              strokeWidth={STROKE_W}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+              strokeOpacity={row < display.litCount ? LIT_OPACITY : DIM_OPACITY}
             />
           ))}
         </g>
