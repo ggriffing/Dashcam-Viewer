@@ -1,69 +1,78 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import type { SeiMetadataRaw } from "@/lib/dashcam/types";
 
 interface FrontCameraOverlayProps {
   metadata: SeiMetadataRaw | null;
 }
 
-const N_ROWS = 4;
-const SVG_W = 520;
-const CX = SVG_W / 2;
+// ── Viewport & tile geometry ──────────────────────────────────────────────────
+const SVG_W  = 520;
+const CX     = SVG_W / 2;
+const SVG_H  = 130;   // visible window height
+const TILE_H = SVG_H; // one seamless tile = one viewport height
 
-// Rows with true perspective foreshortening (hw:ch ≈ 10:1 for all):
-//   index 0 = topmost in SVG (farthest/narrowest, litIndex=3, last to light)
-//   index 3 = bottommost in SVG (closest/widest, litIndex=0, first to light)
-// Y gaps taper: 8px (top) → 11px → 15px (bottom) to reinforce perspective.
+// Perspective-tapered rows: top = farthest/narrowest, bottom = closest/widest.
+// hw:ch ≈ 10:1 simulates road-marking foreshortening.
 const ROWS = [
-  { hw: 75,  ch: 8,  thick: 4,  y: 5,  shadowDY: 3, litIndex: 3 },
-  { hw: 110, ch: 11, thick: 6,  y: 25, shadowDY: 4, litIndex: 2 },
-  { hw: 160, ch: 16, thick: 8,  y: 53, shadowDY: 6, litIndex: 1 },
-  { hw: 220, ch: 22, thick: 10, y: 92, shadowDY: 8, litIndex: 0 },
+  { hw: 75,  ch: 8,  thick: 4,  shadowDY: 3 },
+  { hw: 110, ch: 11, thick: 6,  shadowDY: 4 },
+  { hw: 160, ch: 16, thick: 8,  shadowDY: 6 },
+  { hw: 220, ch: 22, thick: 10, shadowDY: 8 },
 ] as const;
-
-// y(92) + ch(22) + thick(10) + bottom-pad(6) = 130
-const SVG_H = 130;
-
-const BRAKE_COLOR  = "#38BDF8"; // bright sky blue for braking
-const ACCEL_COLOR  = "#F59E0B"; // amber for acceleration
-const GREY_COLOR   = "#888888"; // desaturated grey at low intensity
-const SHADOW_COLOR = "#0F2444"; // dark navy for 3D depth extrusion
-
-const LIT_OPACITY         = 0.90;
-const DIM_OPACITY         = 0.35; // raised so all rows always visible
-const SHADOW_LIT_OPACITY  = 0.68;
-const SHADOW_DIM_OPACITY  = 0.14;
-
-const FLIP_TRANSFORM = `scale(1,-1) translate(0,${-SVG_H})`;
-const OVERLAY_STYLE: React.CSSProperties = { paddingBottom: "8%" };
+const ROW_Y = [5, 25, 53, 92] as const;
 
 function makeChevronPath(hw: number, ch: number, thick: number, y: number): string {
   const tipInner = Math.round(thick * ch / hw);
   return (
-    `M${CX - hw},${y}` +
-    ` L${CX},${y + ch}` +
-    ` L${CX + hw},${y}` +
-    ` L${CX + hw},${y + thick}` +
-    ` L${CX},${y + ch - tipInner}` +
-    ` L${CX - hw},${y + thick}Z`
+    `M${CX - hw},${y} L${CX},${y + ch} L${CX + hw},${y}` +
+    ` L${CX + hw},${y + thick} L${CX},${y + ch - tipInner} L${CX - hw},${y + thick}Z`
   );
 }
 
-const ROW_PATHS    = ROWS.map(r => makeChevronPath(r.hw, r.ch, r.thick, r.y));
-const SHADOW_PATHS = ROWS.map(r => makeChevronPath(r.hw, r.ch, r.thick, r.y + r.shadowDY));
-
-function lerpColor(from: string, to: string, t: number): string {
-  const r1 = parseInt(from.slice(1, 3), 16), r2 = parseInt(to.slice(1, 3), 16);
-  const g1 = parseInt(from.slice(3, 5), 16), g2 = parseInt(to.slice(3, 5), 16);
-  const b1 = parseInt(from.slice(5, 7), 16), b2 = parseInt(to.slice(5, 7), 16);
-  return `rgb(${Math.round(r1 + (r2 - r1) * t)},${Math.round(g1 + (g2 - g1) * t)},${Math.round(b1 + (b2 - b1) * t)})`;
+// Three copies of the pattern stacked vertically — the rAF loop scrolls through
+// them and wraps modulo TILE_H so the seam is invisible.
+const N_TILES = 3;
+const TILED_MAIN: string[]   = [];
+const TILED_SHADOW: string[] = [];
+for (let tile = 0; tile < N_TILES; tile++) {
+  const dy = tile * TILE_H;
+  for (let i = 0; i < ROWS.length; i++) {
+    const r = ROWS[i];
+    const y = ROW_Y[i] + dy;
+    TILED_MAIN.push(makeChevronPath(r.hw, r.ch, r.thick, y));
+    TILED_SHADOW.push(makeChevronPath(r.hw, r.ch, r.thick, y + r.shadowDY));
+  }
 }
 
-function accelToLit(ax: number): number {
-  const a = Math.abs(ax);
-  if (a < 1) return 1;
-  if (a < 2) return 2;
-  if (a < 4) return 3;
-  return 4;
+// ── Colors ────────────────────────────────────────────────────────────────────
+const BRAKE_COLOR  = "#38BDF8"; // sky blue  — braking
+const ACCEL_COLOR  = "#F59E0B"; // amber     — accelerating
+const GREY_COLOR   = "#888888"; // neutral   — low intensity
+const SHADOW_COLOR = "#0F2444"; // dark navy — 3-D depth
+
+// Opacity ranges: scales with intensity (litCount/4)
+const MAX_FILL_OP   = 0.92;
+const MIN_FILL_OP   = 0.42;
+const MAX_SHADOW_OP = 0.65;
+const MIN_SHADOW_OP = 0.12;
+
+// ── Animation constants ───────────────────────────────────────────────────────
+// positive velocity = scroll downward (accel), negative = upward (braking)
+const SCROLL_SCALE  = 22;  // SVG px/s per m/s² of longitudinal accel
+const LATERAL_SCALE = 8;   // SVG px per m/s² of lateral accel
+const LATERAL_MAX   = 28;  // max lateral offset in SVG px
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function lerpColor(from: string, to: string, t: number): string {
+  const p = (s: string, o: number) => parseInt(s.slice(o, o + 2), 16);
+  const r = Math.round(p(from, 1) + (p(to, 1) - p(from, 1)) * t);
+  const g = Math.round(p(from, 3) + (p(to, 3) - p(from, 3)) * t);
+  const b = Math.round(p(from, 5) + (p(to, 5) - p(from, 5)) * t);
+  return `rgb(${r},${g},${b})`;
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
 }
 
 function hasData(m: SeiMetadataRaw): boolean {
@@ -76,61 +85,94 @@ function hasData(m: SeiMetadataRaw): boolean {
 
 type DriveState = "accel" | "brake" | "coast";
 
-interface DisplayState {
-  state: DriveState;
-  litCount: number;
-  ay: number;
+function getState(m: SeiMetadataRaw): { state: DriveState; litCount: number; ax: number } {
+  const rawAx = m.linearAccelerationMps2X;
+  if (rawAx !== undefined) {
+    const a   = Math.abs(rawAx);
+    const lit = a < 1 ? 1 : a < 2 ? 2 : a < 4 ? 3 : 4;
+    if (rawAx >  0.5) return { state: "accel", litCount: lit, ax: rawAx };
+    if (rawAx < -0.5) return { state: "brake", litCount: lit, ax: rawAx };
+    return { state: "coast", litCount: 0, ax: 0 };
+  }
+  if (m.brakeApplied) return { state: "brake", litCount: 3, ax: -3 };
+  const pedal = m.acceleratorPedalPosition ?? 0;
+  if (pedal > 0.05) {
+    const lit = Math.max(1, Math.round(pedal * 4));
+    return { state: "accel", litCount: lit, ax: lit };
+  }
+  return { state: "coast", litCount: 0, ax: 0 };
 }
 
-function getState(m: SeiMetadataRaw): { state: DriveState; litCount: number } {
-  const ax = m.linearAccelerationMps2X;
-  if (ax !== undefined) {
-    if (ax > 0.5) return { state: "accel", litCount: accelToLit(ax) };
-    if (ax < -0.5) return { state: "brake", litCount: accelToLit(ax) };
-    return { state: "coast", litCount: 0 };
-  }
-  if (m.brakeApplied) return { state: "brake", litCount: 3 };
-  const pedal = m.acceleratorPedalPosition ?? 0;
-  if (pedal > 0.05) return { state: "accel", litCount: Math.max(1, Math.round(pedal * N_ROWS)) };
-  return { state: "coast", litCount: 0 };
-}
+// ── Component ─────────────────────────────────────────────────────────────────
+const OVERLAY_STYLE: React.CSSProperties = { paddingBottom: "8%" };
 
 export function FrontCameraOverlay({ metadata }: FrontCameraOverlayProps) {
-  const lastVisibleRef = useRef<DisplayState | null>(null);
+  // Refs written by React render, read by rAF loop — no React re-renders per frame
+  const groupRef    = useRef<SVGGElement | null>(null);
+  const scrollRef   = useRef(0);      // current scroll accumulator (SVG px)
+  const velocityRef = useRef(0);      // px/s; positive = down (accel), neg = up (braking)
+  const lateralRef  = useRef(0);      // horizontal offset in SVG px
+  const rafRef      = useRef<number | null>(null);
+  const lastTimeRef = useRef<number | null>(null);
 
+  // Animation loop: starts on mount, runs for the lifetime of the component.
+  // Writes SVG transform directly — zero React overhead per frame.
+  useEffect(() => {
+    function frame(time: number) {
+      if (lastTimeRef.current !== null) {
+        const dt = Math.min((time - lastTimeRef.current) / 1000, 0.05); // cap at 50 ms
+        scrollRef.current += velocityRef.current * dt;
+      }
+      lastTimeRef.current = time;
+
+      if (groupRef.current) {
+        // Keep offset in [0, TILE_H) and bias by -TILE_H so middle tile is visible
+        const wrapped = ((scrollRef.current % TILE_H) + TILE_H) % TILE_H;
+        const ty = -(TILE_H + wrapped);
+        groupRef.current.setAttribute(
+          "transform",
+          `translate(${lateralRef.current.toFixed(1)},${ty.toFixed(1)})`,
+        );
+      }
+
+      rafRef.current = requestAnimationFrame(frame);
+    }
+
+    rafRef.current = requestAnimationFrame(frame);
+    return () => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
+
+  // ── Telemetry decode (runs each React render = each video frame) ──
   const noData = !metadata || !hasData(metadata);
-  const speed = metadata?.vehicleSpeedMps ?? -1;
+  const speed  = metadata?.vehicleSpeedMps ?? -1;
 
-  let visible = false;
+  let visible  = false;
   let state: DriveState = "coast";
   let litCount = 0;
+  let ax = 0;
   let ay = 0;
 
   if (!noData && speed !== 0) {
-    const result = getState(metadata!);
-    state = result.state;
-    litCount = result.litCount;
-    ay = metadata?.linearAccelerationMps2Y ?? 0;
-    if (state !== "coast") {
-      visible = true;
-      lastVisibleRef.current = { state, litCount, ay };
-    }
+    const r = getState(metadata!);
+    state    = r.state;
+    litCount = r.litCount;
+    ax       = r.ax;
+    ay       = metadata?.linearAccelerationMps2Y ?? 0;
+    if (state !== "coast") visible = true;
   }
 
-  const display: DisplayState = visible
-    ? { state, litCount, ay }
-    : lastVisibleRef.current ?? { state: "accel", litCount: 0, ay: 0 };
+  // Push new physics values to refs — rAF loop reads them next frame
+  velocityRef.current = visible ? ax * SCROLL_SCALE : 0;
+  lateralRef.current  = Math.max(-LATERAL_MAX, Math.min(LATERAL_MAX, ay * LATERAL_SCALE));
 
-  const isBrake = display.state === "brake";
-
-  // Color-intensity: interpolate from grey → active color as litCount rises
-  const colorT = display.litCount / N_ROWS; // 0.25 → 1.0
-  const activeColor = isBrake ? BRAKE_COLOR : ACCEL_COLOR;
-  const fillColor = lerpColor(GREY_COLOR, activeColor, colorT);
-
-  // Lateral tilt: rotate around bottom-center, ±8° max
-  const tiltDeg = Math.max(-8, Math.min(8, display.ay * 2.5));
-  const tiltTransform = `rotate(${tiltDeg.toFixed(2)},${CX},${SVG_H})`;
+  // Visual properties — ok to update at video-frame rate via React render
+  const colorT        = litCount / 4; // 0.25 → 1.0
+  const activeColor   = state === "brake" ? BRAKE_COLOR : ACCEL_COLOR;
+  const fillColor     = visible ? lerpColor(GREY_COLOR, activeColor, colorT) : GREY_COLOR;
+  const fillOpacity   = lerp(MIN_FILL_OP,   MAX_FILL_OP,   colorT);
+  const shadowOpacity = lerp(MIN_SHADOW_OP, MAX_SHADOW_OP, colorT);
 
   return (
     <div
@@ -144,28 +186,23 @@ export function FrontCameraOverlay({ metadata }: FrontCameraOverlayProps) {
       <svg
         viewBox={`0 0 ${SVG_W} ${SVG_H}`}
         width="62%"
-        overflow="visible"
-        style={{ display: "block" }}
+        style={{ display: "block", overflow: "hidden" }}
       >
-        <g transform={tiltTransform}>
-          <g transform={isBrake ? FLIP_TRANSFORM : undefined}>
-            {/* 3D extrusion: shadow shifted down, peeks below main face */}
-            {ROWS.map((r, i) => (
-              <path
-                key={`shadow-${i}`}
-                d={SHADOW_PATHS[i]}
-                fill={SHADOW_COLOR}
-                fillOpacity={r.litIndex < display.litCount ? SHADOW_LIT_OPACITY : SHADOW_DIM_OPACITY}
-              />
+        <defs>
+          <clipPath id="chev-clip">
+            <rect x="0" y="0" width={SVG_W} height={SVG_H} />
+          </clipPath>
+        </defs>
+
+        {/* Clip to viewport so tiles entering/exiting are hidden cleanly */}
+        <g clipPath="url(#chev-clip)">
+          {/* groupRef gets translate(lateralX, scrollY) written by rAF each frame */}
+          <g ref={groupRef} transform={`translate(0,${-TILE_H})`}>
+            {TILED_SHADOW.map((d, i) => (
+              <path key={`s${i}`} d={d} fill={SHADOW_COLOR} fillOpacity={shadowOpacity} />
             ))}
-            {/* Main colored face */}
-            {ROWS.map((r, i) => (
-              <path
-                key={`fill-${i}`}
-                d={ROW_PATHS[i]}
-                fill={fillColor}
-                fillOpacity={r.litIndex < display.litCount ? LIT_OPACITY : DIM_OPACITY}
-              />
+            {TILED_MAIN.map((d, i) => (
+              <path key={`m${i}`} d={d} fill={fillColor} fillOpacity={fillOpacity} />
             ))}
           </g>
         </g>
