@@ -15,10 +15,10 @@ const AUTOPILOT_LABELS: Record<number, string> = {
 const BLUE = "#3B8EEA";
 
 const CVS_W = 440;
-const CVS_H = 250;
+const CVS_H = 200;
 const CX = CVS_W / 2;
 
-const BOT_Y = 195;
+const BOT_Y = 198;
 const BOT_HW = 195;
 const TOP_HW_MIN = 155;
 const TOP_HW_MAX = 45;
