@@ -15,20 +15,21 @@ const AUTOPILOT_LABELS: Record<number, string> = {
 const BLUE = "#3B8EEA";
 
 const CVS_W = 440;
-const CVS_H = 220;
+const CVS_H = 200;
 const CX = CVS_W / 2;
 
-const BOT_Y = 210;
-const BOT_HW = 200;
-const TOP_HW_MIN = 160;
-const TOP_HW_MAX = 50;
+const BOT_Y = 195;
+const BOT_HW = 195;
+const TOP_HW_MIN = 155;
+const TOP_HW_MAX = 45;
 
-const MIN_H = 30;
-const MAX_H = 180;
+const MIN_H = 28;
+const MAX_H = 170;
 const SPEED_FOR_MAX = 30;
 
-const N_STRIPES = 7;
-const GAP_RATIO = 0.55;
+const N_ARROWS = 5;
+const ARROW_SPACING = 1.0;
+const ARROW_THICKNESS = 0.35;
 const SCROLL_SCALE = 40;
 const LATERAL_SCALE = 0.05;
 const LATERAL_MAX = 0.22;
@@ -73,7 +74,7 @@ interface TrapGeom {
 
 function computeTrapGeom(speed: number, ax: number): TrapGeom {
   const speedFrac = clamp01(speed / SPEED_FOR_MAX);
-  const accelBoost = clamp01(Math.abs(ax) / 5) * 15;
+  const accelBoost = clamp01(Math.abs(ax) / 5) * 12;
   const h = MIN_H + (MAX_H - MIN_H) * speedFrac + accelBoost;
   const topY = BOT_Y - h;
   const hFrac = clamp01(h / MAX_H);
@@ -100,56 +101,59 @@ function drawTrap(ctx: CanvasRenderingContext2D, g: TrapGeom, lateral: number) {
   ctx.closePath();
 }
 
-function drawChevronStripe(
+function drawArrow(
   ctx: CanvasRenderingContext2D,
   g: TrapGeom,
-  y1raw: number,
-  y2raw: number,
+  apexYraw: number,
+  arrowH: number,
   lateral: number,
-  dipDir: number,
+  pointUp: boolean,
 ) {
-  const y1 = Math.max(g.topY, Math.min(g.botY, y1raw));
-  const y2 = Math.max(g.topY, Math.min(g.botY, y2raw));
-  if (y2 - y1 < 0.5) return;
+  const thickness = arrowH * ARROW_THICKNESS;
 
-  const t1 = (y1 - g.topY) / g.h;
-  const t2 = (y2 - g.topY) / g.h;
-  const hw1 = hwAt(g, t1);
-  const hw2 = hwAt(g, t2);
-  const s1 = sAt(t1, lateral);
-  const s2 = sAt(t2, lateral);
+  let outerApexY: number, outerWingY: number, innerApexY: number, innerWingY: number;
 
-  ctx.beginPath();
-
-  if (Math.abs(dipDir) < 0.01) {
-    ctx.moveTo(CX - hw1 + s1, y1);
-    ctx.lineTo(CX + hw1 + s1, y1);
-    ctx.lineTo(CX + hw2 + s2, y2);
-    ctx.lineTo(CX - hw2 + s2, y2);
+  if (pointUp) {
+    outerApexY = apexYraw;
+    outerWingY = apexYraw + arrowH;
+    innerApexY = apexYraw + thickness;
+    innerWingY = apexYraw + arrowH;
   } else {
-    const dip = (y2 - y1) * 0.75 * dipDir;
-    const midY = (y1 + y2) / 2 + dip;
-    const tMid = clamp01((midY - g.topY) / g.h);
-    const hwM = hwAt(g, tMid);
-    const sM = sAt(tMid, lateral);
-
-    if (dipDir > 0) {
-      ctx.moveTo(CX - hw1 + s1, y1);
-      ctx.lineTo(CX + hw1 + s1, y1);
-      ctx.lineTo(CX + hwM + sM, midY);
-      ctx.lineTo(CX + hw2 + s2, y2);
-      ctx.lineTo(CX - hw2 + s2, y2);
-      ctx.lineTo(CX - hwM + sM, midY);
-    } else {
-      ctx.moveTo(CX - hw1 + s1, y1);
-      ctx.lineTo(CX - hwM + sM, midY);
-      ctx.lineTo(CX + hw1 + s1, y1);
-      ctx.lineTo(CX + hw2 + s2, y2);
-      ctx.lineTo(CX + hwM + sM, midY);
-      ctx.lineTo(CX - hw2 + s2, y2);
-    }
+    outerApexY = apexYraw + arrowH;
+    outerWingY = apexYraw;
+    innerApexY = apexYraw + arrowH - thickness;
+    innerWingY = apexYraw;
   }
 
+  const clampAndDraw = (aY: number, wY: number) => {
+    const cAY = Math.max(g.topY, Math.min(g.botY, aY));
+    const cWY = Math.max(g.topY, Math.min(g.botY, wY));
+    if (Math.abs(cAY - cWY) < 0.5) return null;
+
+    const tA = (cAY - g.topY) / g.h;
+    const tW = (cWY - g.topY) / g.h;
+    const hwA = hwAt(g, tA);
+    const hwW = hwAt(g, tW);
+    const sA = sAt(tA, lateral);
+    const sW = sAt(tW, lateral);
+    return { cAY, cWY, hwA, hwW, sA, sW };
+  };
+
+  const outer = clampAndDraw(outerApexY, outerWingY);
+  const inner = clampAndDraw(innerApexY, innerWingY);
+  if (!outer) return;
+
+  ctx.beginPath();
+  ctx.moveTo(CX + outer.sA, outer.cAY);
+  ctx.lineTo(CX + outer.hwW + outer.sW, outer.cWY);
+
+  if (inner) {
+    ctx.lineTo(CX + inner.hwW + inner.sW, inner.cWY);
+    ctx.lineTo(CX + inner.sA, inner.cAY);
+    ctx.lineTo(CX - inner.hwW + inner.sW, inner.cWY);
+  }
+
+  ctx.lineTo(CX - outer.hwW + outer.sW, outer.cWY);
   ctx.closePath();
   ctx.fill();
 }
@@ -188,18 +192,16 @@ export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayPr
         const driveState = stateRef.current;
         const g = geomRef.current;
 
-        const stripeH = g.h / (N_STRIPES + (N_STRIPES - 1) * GAP_RATIO);
-        const gapH = stripeH * GAP_RATIO;
-        const period = stripeH + gapH;
-
         if (driveState === "coast") {
           ctx.fillStyle = BLUE;
-          ctx.globalAlpha = 0.50;
+          ctx.globalAlpha = 0.45;
           drawTrap(ctx, g, lateral);
           ctx.fill();
         } else {
+          const arrowH = g.h * ARROW_SPACING / N_ARROWS;
+          const period = arrowH;
           const offset = ((scrollRef.current % period) + period) % period;
-          const dipDir = driveState === "brake" ? -1 : 1;
+          const pointUp = driveState === "brake";
 
           ctx.fillStyle = BLUE;
           ctx.globalAlpha = 0.60;
@@ -208,9 +210,9 @@ export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayPr
           drawTrap(ctx, g, lateral);
           ctx.clip();
 
-          for (let i = -2; i < N_STRIPES + 3; i++) {
-            const y1 = g.topY + i * period - offset;
-            drawChevronStripe(ctx, g, y1, y1 + stripeH, lateral, dipDir);
+          for (let i = -2; i < N_ARROWS + 3; i++) {
+            const apexY = g.topY + i * period - offset;
+            drawArrow(ctx, g, apexY, arrowH, lateral, pointUp);
           }
           ctx.restore();
         }
@@ -252,7 +254,7 @@ export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayPr
   const autopilotLabel = AUTOPILOT_LABELS[autopilotState];
 
   return (
-    <div className="absolute inset-0 pointer-events-none">
+    <div className="absolute inset-0 pointer-events-none overflow-hidden">
       {autopilotLabel && (
         <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-sm border border-white/15" data-testid="autopilot-badge">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#38BDF8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -269,7 +271,7 @@ export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayPr
         ref={canvasRef}
         width={CVS_W}
         height={CVS_H}
-        className="absolute bottom-[2%] left-1/2 -translate-x-1/2"
+        className="absolute bottom-[5%] left-1/2 -translate-x-1/2"
         style={{
           width: "55%",
           imageRendering: "auto",
