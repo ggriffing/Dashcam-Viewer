@@ -17,7 +17,7 @@ const THICK = 6;
 const SHADOW_DY = 4;
 const ROW_Y = [10, 40, 70, 100] as const;
 
-function makeChevronPath(hw: number, ch: number, thick: number, y: number): string {
+function makeChevronDown(hw: number, ch: number, thick: number, y: number): string {
   const tipInner = Math.round(thick * ch / hw);
   return (
     `M${CX - hw},${y} L${CX},${y + ch} L${CX + hw},${y}` +
@@ -25,15 +25,29 @@ function makeChevronPath(hw: number, ch: number, thick: number, y: number): stri
   );
 }
 
+function makeChevronUp(hw: number, ch: number, thick: number, y: number): string {
+  const tipInner = Math.round(thick * ch / hw);
+  return (
+    `M${CX - hw},${y + ch} L${CX},${y} L${CX + hw},${y + ch}` +
+    ` L${CX + hw},${y + ch - thick} L${CX},${y + tipInner} L${CX - hw},${y + ch - thick}Z`
+  );
+}
+
 const N_TILES = 3;
-const TILED_MAIN: string[]   = [];
-const TILED_SHADOW: string[] = [];
+
+const TILED_DOWN_MAIN: string[]   = [];
+const TILED_DOWN_SHADOW: string[] = [];
+const TILED_UP_MAIN: string[]     = [];
+const TILED_UP_SHADOW: string[]   = [];
+
 for (let tile = 0; tile < N_TILES; tile++) {
   const dy = tile * TILE_H;
   for (let i = 0; i < ROW_Y.length; i++) {
     const y = ROW_Y[i] + dy;
-    TILED_MAIN.push(makeChevronPath(HW, CH, THICK, y));
-    TILED_SHADOW.push(makeChevronPath(HW, CH, THICK, y + SHADOW_DY));
+    TILED_DOWN_MAIN.push(makeChevronDown(HW, CH, THICK, y));
+    TILED_DOWN_SHADOW.push(makeChevronDown(HW, CH, THICK, y + SHADOW_DY));
+    TILED_UP_MAIN.push(makeChevronUp(HW, CH, THICK, y));
+    TILED_UP_SHADOW.push(makeChevronUp(HW, CH, THICK, y + SHADOW_DY));
   }
 }
 
@@ -166,9 +180,12 @@ export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayPr
   const fillOpacity   = lerp(MIN_FILL_OP,   MAX_FILL_OP,   colorT);
   const shadowOpacity = lerp(MIN_SHADOW_OP, MAX_SHADOW_OP, colorT);
 
+  const isAccel      = state === "accel";
+  const mainPaths    = isAccel ? TILED_UP_MAIN   : TILED_DOWN_MAIN;
+  const shadowPaths  = isAccel ? TILED_UP_SHADOW : TILED_DOWN_SHADOW;
+
   const autopilotState = metadata?.autopilotState ?? 0;
   const autopilotLabel = AUTOPILOT_LABELS[autopilotState];
-  const metaVersion    = metadata?.version;
 
   return (
     <div className="absolute inset-0 pointer-events-none">
@@ -180,7 +197,6 @@ export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayPr
           </svg>
           <span className="text-[11px] font-medium text-sky-300 whitespace-nowrap tracking-wide">
             {autopilotLabel}
-            {metaVersion !== undefined && metaVersion > 0 && ` v${metaVersion}`}
           </span>
         </div>
       )}
@@ -206,10 +222,10 @@ export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayPr
 
           <g clipPath={`url(#${clipId})`}>
             <g ref={groupRef} transform={`translate(0,${-TILE_H})`}>
-              {TILED_SHADOW.map((d, i) => (
+              {shadowPaths.map((d, i) => (
                 <path key={`s${i}`} d={d} fill={SHADOW_COLOR} fillOpacity={shadowOpacity} />
               ))}
-              {TILED_MAIN.map((d, i) => (
+              {mainPaths.map((d, i) => (
                 <path key={`m${i}`} d={d} fill={fillColor} fillOpacity={fillOpacity} />
               ))}
             </g>
