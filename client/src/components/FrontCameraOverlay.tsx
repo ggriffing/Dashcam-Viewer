@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useRef } from "react";
 import type { SeiMetadataRaw } from "@/lib/dashcam/types";
 
 interface FrontCameraOverlayProps {
@@ -6,129 +6,141 @@ interface FrontCameraOverlayProps {
   isPlaying: boolean;
 }
 
-const SVG_W  = 520;
-const CX     = SVG_W / 2;
-const SVG_H  = 150;
-const TILE_H = SVG_H;
-
-const HW    = 220;
-const CH    = 4;
-const THICK = 14;
-const N_ROWS = 5;
-const SHADOW_DY = 3;
-
-const ROW_SPACING = 27;
-const ROW_START   = 5;
-const ROW_Y: number[] = [];
-for (let i = 0; i < N_ROWS; i++) ROW_Y.push(ROW_START + i * ROW_SPACING);
-
-function makeChevronDown(hw: number, ch: number, thick: number, y: number): string {
-  const tipInner = Math.round(thick * ch / hw);
-  return (
-    `M${CX - hw},${y} L${CX},${y + ch} L${CX + hw},${y}` +
-    ` L${CX + hw},${y + thick} L${CX},${y + ch + thick - tipInner} L${CX - hw},${y + thick}Z`
-  );
-}
-
-function makeChevronUp(hw: number, ch: number, thick: number, y: number): string {
-  const tipInner = Math.round(thick * ch / hw);
-  return (
-    `M${CX - hw},${y + ch + thick} L${CX},${y + thick} L${CX + hw},${y + ch + thick}` +
-    ` L${CX + hw},${y + ch} L${CX},${y + tipInner} L${CX - hw},${y + ch}Z`
-  );
-}
-
-const N_TILES = 3;
-
-const TILED_DOWN_MAIN: string[]   = [];
-const TILED_DOWN_SHADOW: string[] = [];
-const TILED_UP_MAIN: string[]     = [];
-const TILED_UP_SHADOW: string[]   = [];
-
-for (let tile = 0; tile < N_TILES; tile++) {
-  const dy = tile * TILE_H;
-  for (let i = 0; i < N_ROWS; i++) {
-    const y = ROW_Y[i] + dy;
-    TILED_DOWN_MAIN.push(makeChevronDown(HW, CH, THICK, y));
-    TILED_DOWN_SHADOW.push(makeChevronDown(HW, CH, THICK, y + SHADOW_DY));
-    TILED_UP_MAIN.push(makeChevronUp(HW, CH, THICK, y));
-    TILED_UP_SHADOW.push(makeChevronUp(HW, CH, THICK, y + SHADOW_DY));
-  }
-}
-
-const BRAKE_COLOR  = "#38BDF8";
-const ACCEL_COLOR  = "#F59E0B";
-const GREY_COLOR   = "#888888";
-const SHADOW_COLOR = "#0F2444";
-
-const MAX_FILL_OP   = 0.85;
-const MIN_FILL_OP   = 0.50;
-const MAX_SHADOW_OP = 0.55;
-const MIN_SHADOW_OP = 0.10;
-
-const SCROLL_SCALE  = 28;
-const LATERAL_SCALE = 8;
-const LATERAL_MAX   = 28;
-
 const AUTOPILOT_LABELS: Record<number, string> = {
   1: "Self-Driving",
   2: "Autosteer",
   3: "TACC",
 };
 
-function lerpColor(from: string, to: string, t: number): string {
-  const p = (s: string, o: number) => parseInt(s.slice(o, o + 2), 16);
-  const r = Math.round(p(from, 1) + (p(to, 1) - p(from, 1)) * t);
-  const g = Math.round(p(from, 3) + (p(to, 3) - p(from, 3)) * t);
-  const b = Math.round(p(from, 5) + (p(to, 5) - p(from, 5)) * t);
-  return `rgb(${r},${g},${b})`;
-}
+const BLUE = "#3B8EEA";
 
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
-}
+const CVS_W = 440;
+const CVS_H = 200;
+const CX = CVS_W / 2;
+
+const TRAP_TOP_HW = 55;
+const TRAP_BOT_HW = 200;
+const TRAP_TOP_Y = 15;
+const TRAP_BOT_Y = 190;
+const TRAP_H = TRAP_BOT_Y - TRAP_TOP_Y;
+
+const N_STRIPES = 7;
+const GAP_RATIO = 0.40;
+const SCROLL_SCALE = 40;
+const LATERAL_SCALE = 0.05;
+const LATERAL_MAX = 0.22;
 
 function hasData(m: SeiMetadataRaw): boolean {
   return (
     m.linearAccelerationMps2X !== undefined ||
     m.acceleratorPedalPosition !== undefined ||
-    m.brakeApplied !== undefined
+    m.brakeApplied !== undefined ||
+    m.vehicleSpeedMps !== undefined
   );
 }
 
 type DriveState = "accel" | "brake" | "coast";
 
-function getState(m: SeiMetadataRaw): { state: DriveState; litCount: number; ax: number } {
+function getState(m: SeiMetadataRaw): { state: DriveState; ax: number } {
   const rawAx = m.linearAccelerationMps2X;
   if (rawAx !== undefined) {
-    const a   = Math.abs(rawAx);
-    const lit = a < 1 ? 1 : a < 2 ? 2 : a < 4 ? 3 : 4;
-    if (rawAx >  0.5) return { state: "accel", litCount: lit, ax: rawAx };
-    if (rawAx < -0.5) return { state: "brake", litCount: lit, ax: rawAx };
-    return { state: "coast", litCount: 0, ax: 0 };
+    if (rawAx > 0.5) return { state: "accel", ax: rawAx };
+    if (rawAx < -0.5) return { state: "brake", ax: rawAx };
+    return { state: "coast", ax: 0 };
   }
-  if (m.brakeApplied) return { state: "brake", litCount: 3, ax: -3 };
+  if (m.brakeApplied) return { state: "brake", ax: -3 };
   const pedal = m.acceleratorPedalPosition ?? 0;
-  if (pedal > 0.05) {
-    const lit = Math.max(1, Math.round(pedal * 4));
-    return { state: "accel", litCount: lit, ax: lit };
+  if (pedal > 0.05) return { state: "accel", ax: pedal * 4 };
+  return { state: "coast", ax: 0 };
+}
+
+function hwAt(t: number): number {
+  return TRAP_TOP_HW + (TRAP_BOT_HW - TRAP_TOP_HW) * t;
+}
+
+function shiftAt(t: number, lateral: number): number {
+  return lateral * t;
+}
+
+function drawTrapezoid(ctx: CanvasRenderingContext2D, lateral: number) {
+  const sTop = shiftAt(0, lateral);
+  const sBot = shiftAt(1, lateral);
+  ctx.beginPath();
+  ctx.moveTo(CX - TRAP_BOT_HW + sBot, TRAP_BOT_Y);
+  ctx.lineTo(CX - TRAP_TOP_HW + sTop, TRAP_TOP_Y);
+  ctx.lineTo(CX + TRAP_TOP_HW + sTop, TRAP_TOP_Y);
+  ctx.lineTo(CX + TRAP_BOT_HW + sBot, TRAP_BOT_Y);
+  ctx.closePath();
+}
+
+function drawStripe(
+  ctx: CanvasRenderingContext2D,
+  y1: number,
+  y2: number,
+  lateral: number,
+  chevronDip: number,
+) {
+  const clampY1 = Math.max(TRAP_TOP_Y, Math.min(TRAP_BOT_Y, y1));
+  const clampY2 = Math.max(TRAP_TOP_Y, Math.min(TRAP_BOT_Y, y2));
+  if (clampY2 - clampY1 < 0.5) return;
+
+  const t1 = (clampY1 - TRAP_TOP_Y) / TRAP_H;
+  const t2 = (clampY2 - TRAP_TOP_Y) / TRAP_H;
+  const hw1 = hwAt(t1);
+  const hw2 = hwAt(t2);
+  const s1 = shiftAt(t1, lateral);
+  const s2 = shiftAt(t2, lateral);
+
+  ctx.beginPath();
+
+  if (Math.abs(chevronDip) < 0.1) {
+    ctx.moveTo(CX - hw1 + s1, clampY1);
+    ctx.lineTo(CX + hw1 + s1, clampY1);
+    ctx.lineTo(CX + hw2 + s2, clampY2);
+    ctx.lineTo(CX - hw2 + s2, clampY2);
+  } else {
+    const midY = (clampY1 + clampY2) / 2 + chevronDip;
+    const tMid = Math.max(0, Math.min(1, (midY - TRAP_TOP_Y) / TRAP_H));
+    const hwM = hwAt(tMid);
+    const sM = shiftAt(tMid, lateral);
+
+    if (chevronDip > 0) {
+      ctx.moveTo(CX - hw1 + s1, clampY1);
+      ctx.lineTo(CX + hw1 + s1, clampY1);
+      ctx.lineTo(CX + hwM + sM, midY);
+      ctx.lineTo(CX + hw2 + s2, clampY2);
+      ctx.lineTo(CX - hw2 + s2, clampY2);
+      ctx.lineTo(CX - hwM + sM, midY);
+    } else {
+      ctx.moveTo(CX - hw1 + s1, clampY1);
+      ctx.lineTo(CX - hwM + sM, midY);
+      ctx.lineTo(CX + hw1 + s1, clampY1);
+      ctx.lineTo(CX + hw2 + s2, clampY2);
+      ctx.lineTo(CX + hwM + sM, midY);
+      ctx.lineTo(CX - hw2 + s2, clampY2);
+    }
   }
-  return { state: "coast", litCount: 0, ax: 0 };
+
+  ctx.closePath();
+  ctx.fill();
 }
 
 export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayProps) {
-  const uid = useId();
-  const clipId = `chev-clip-${uid}`;
-
-  const groupRef       = useRef<SVGGElement | null>(null);
-  const scrollRef      = useRef(0);
-  const velocityRef    = useRef(0);
-  const targetVelRef   = useRef(0);
-  const lateralRef     = useRef(0);
-  const rafRef         = useRef<number | null>(null);
-  const lastTimeRef    = useRef<number | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const scrollRef = useRef(0);
+  const velocityRef = useRef(0);
+  const targetVelRef = useRef(0);
+  const lateralRef = useRef(0);
+  const stateRef = useRef<DriveState>("coast");
+  const visibleRef = useRef(false);
+  const rafRef = useRef<number | null>(null);
+  const lastTimeRef = useRef<number | null>(null);
 
   useEffect(() => {
+    const stripeH = TRAP_H / (N_STRIPES + (N_STRIPES - 1) * GAP_RATIO);
+    const gapH = stripeH * GAP_RATIO;
+    const period = stripeH + gapH;
+
     function frame(time: number) {
       if (lastTimeRef.current !== null) {
         const dt = Math.min((time - lastTimeRef.current) / 1000, 0.05);
@@ -138,15 +150,50 @@ export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayPr
       }
       lastTimeRef.current = time;
 
-      if (groupRef.current) {
-        const wrapped = ((scrollRef.current % TILE_H) + TILE_H) % TILE_H;
-        const ty = -(TILE_H + wrapped);
-        groupRef.current.setAttribute(
-          "transform",
-          `translate(${lateralRef.current.toFixed(1)},${ty.toFixed(1)})`,
-        );
+      const canvas = canvasRef.current;
+      if (!canvas) { rafRef.current = requestAnimationFrame(frame); return; }
+      const ctx = canvas.getContext("2d");
+      if (!ctx) { rafRef.current = requestAnimationFrame(frame); return; }
+
+      ctx.clearRect(0, 0, CVS_W, CVS_H);
+
+      if (visibleRef.current) {
+        const lateral = lateralRef.current * (TRAP_BOT_HW * 2);
+        const driveState = stateRef.current;
+
+        if (driveState === "coast") {
+          ctx.fillStyle = BLUE;
+          ctx.globalAlpha = 0.40;
+          drawTrapezoid(ctx, lateral);
+          ctx.fill();
+
+          ctx.globalAlpha = 0.55;
+          const offset = ((scrollRef.current % period) + period) % period;
+          for (let i = -1; i < N_STRIPES + 1; i++) {
+            const y1 = TRAP_TOP_Y + i * period - offset;
+            drawStripe(ctx, y1, y1 + stripeH, lateral, 0);
+          }
+        } else {
+          const offset = ((scrollRef.current % period) + period) % period;
+          const dipAmount = stripeH * 0.22;
+          const dip = driveState === "accel" ? dipAmount : -dipAmount;
+
+          ctx.fillStyle = BLUE;
+          ctx.globalAlpha = 0.65;
+
+          ctx.save();
+          drawTrapezoid(ctx, lateral);
+          ctx.clip();
+
+          for (let i = -2; i < N_STRIPES + 2; i++) {
+            const y1 = TRAP_TOP_Y + i * period - offset;
+            drawStripe(ctx, y1, y1 + stripeH, lateral, dip);
+          }
+          ctx.restore();
+        }
       }
 
+      ctx.globalAlpha = 1;
       rafRef.current = requestAnimationFrame(frame);
     }
 
@@ -157,35 +204,25 @@ export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayPr
   }, []);
 
   const noData = !metadata || !hasData(metadata);
-  const speed  = metadata?.vehicleSpeedMps ?? -1;
+  const speed = metadata?.vehicleSpeedMps ?? 0;
 
-  let visible  = false;
+  let visible = false;
   let state: DriveState = "coast";
-  let litCount = 0;
   let ax = 0;
   let ay = 0;
 
-  if (!noData && speed !== 0) {
+  if (!noData && speed > 0.5) {
     const r = getState(metadata!);
-    state    = r.state;
-    litCount = r.litCount;
-    ax       = r.ax;
-    ay       = metadata?.linearAccelerationMps2Y ?? 0;
-    if (state !== "coast") visible = true;
+    state = r.state;
+    ax = r.ax;
+    ay = metadata?.linearAccelerationMps2Y ?? 0;
+    visible = true;
   }
 
-  targetVelRef.current = (visible && isPlaying) ? -ax * SCROLL_SCALE : 0;
-  lateralRef.current   = Math.max(-LATERAL_MAX, Math.min(LATERAL_MAX, ay * LATERAL_SCALE));
-
-  const colorT        = litCount / 4;
-  const activeColor   = state === "brake" ? BRAKE_COLOR : ACCEL_COLOR;
-  const fillColor     = visible ? lerpColor(GREY_COLOR, activeColor, colorT) : GREY_COLOR;
-  const fillOpacity   = lerp(MIN_FILL_OP,   MAX_FILL_OP,   colorT);
-  const shadowOpacity = lerp(MIN_SHADOW_OP, MAX_SHADOW_OP, colorT);
-
-  const isAccel      = state === "accel";
-  const mainPaths    = isAccel ? TILED_UP_MAIN   : TILED_DOWN_MAIN;
-  const shadowPaths  = isAccel ? TILED_UP_SHADOW : TILED_DOWN_SHADOW;
+  visibleRef.current = visible;
+  stateRef.current = state;
+  targetVelRef.current = (visible && isPlaying && state !== "coast") ? -ax * SCROLL_SCALE : 0;
+  lateralRef.current = Math.max(-LATERAL_MAX, Math.min(LATERAL_MAX, ay * LATERAL_SCALE));
 
   const autopilotState = metadata?.autopilotState ?? 0;
   const autopilotLabel = AUTOPILOT_LABELS[autopilotState];
@@ -204,43 +241,19 @@ export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayPr
         </div>
       )}
 
-      <div
-        className="absolute inset-x-0 bottom-0 flex justify-center"
+      <canvas
+        ref={canvasRef}
+        width={CVS_W}
+        height={CVS_H}
+        className="absolute bottom-[4%] left-1/2 -translate-x-1/2"
         style={{
-          paddingBottom: "4%",
+          width: "55%",
+          imageRendering: "auto",
           opacity: visible ? 1 : 0,
-          transition: "opacity 120ms ease-out",
-          perspective: "350px",
+          transition: "opacity 150ms ease-out",
         }}
-      >
-        <svg
-          viewBox={`0 0 ${SVG_W} ${SVG_H}`}
-          width="62%"
-          style={{
-            display: "block",
-            overflow: "hidden",
-            transform: "rotateX(40deg)",
-            transformOrigin: "center bottom",
-          }}
-        >
-          <defs>
-            <clipPath id={clipId}>
-              <rect x="0" y="0" width={SVG_W} height={SVG_H} />
-            </clipPath>
-          </defs>
-
-          <g clipPath={`url(#${clipId})`}>
-            <g ref={groupRef} transform={`translate(0,${-TILE_H})`}>
-              {shadowPaths.map((d, i) => (
-                <path key={`s${i}`} d={d} fill={SHADOW_COLOR} fillOpacity={shadowOpacity} />
-              ))}
-              {mainPaths.map((d, i) => (
-                <path key={`m${i}`} d={d} fill={fillColor} fillOpacity={fillOpacity} />
-              ))}
-            </g>
-          </g>
-        </svg>
-      </div>
+        data-testid="road-overlay-canvas"
+      />
     </div>
   );
 }
