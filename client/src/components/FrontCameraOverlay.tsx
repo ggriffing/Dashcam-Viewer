@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 import type { SeiMetadataRaw } from "@/lib/dashcam/types";
 
 interface FrontCameraOverlayProps {
@@ -107,6 +107,9 @@ function getState(m: SeiMetadataRaw): { state: DriveState; litCount: number; ax:
 const OVERLAY_STYLE: React.CSSProperties = { paddingBottom: "8%" };
 
 export function FrontCameraOverlay({ metadata }: FrontCameraOverlayProps) {
+  const uid = useId(); // unique per instance — avoids clipPath id collision if multiple instances render
+  const clipId = `chev-clip-${uid}`;
+
   // Refs written by React render, read by rAF loop — no React re-renders per frame
   const groupRef       = useRef<SVGGElement | null>(null);
   const scrollRef      = useRef(0);   // current scroll accumulator (SVG px)
@@ -196,13 +199,13 @@ export function FrontCameraOverlay({ metadata }: FrontCameraOverlayProps) {
         style={{ display: "block", overflow: "hidden" }}
       >
         <defs>
-          <clipPath id="chev-clip">
+          <clipPath id={clipId}>
             <rect x="0" y="0" width={SVG_W} height={SVG_H} />
           </clipPath>
         </defs>
 
         {/* Clip to viewport so tiles entering/exiting are hidden cleanly */}
-        <g clipPath="url(#chev-clip)">
+        <g clipPath={`url(#${clipId})`}>
           {/* groupRef gets translate(lateralX, scrollY) written by rAF each frame */}
           <g ref={groupRef} transform={`translate(0,${-TILE_H})`}>
             {TILED_SHADOW.map((d, i) => (
