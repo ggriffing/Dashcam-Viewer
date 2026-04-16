@@ -212,16 +212,16 @@ export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayPr
 
         ctx.restore();
 
-        // Speed text centered at bottom of trapezoid
+        // Speed text inside the trapezoid near the bottom
         const g2 = geomRef.current;
         const mph = speedMphRef.current;
-        const textY = g2.botY + 28;
+        const textY = g2.botY - 14;
         ctx.globalAlpha = 1.0;
         ctx.font = "bold 44px system-ui, sans-serif";
         ctx.textAlign = "center";
         ctx.textBaseline = "alphabetic";
-        ctx.fillStyle = "#000000";
-        ctx.fillText(String(mph), CX + 3, textY + 3);
+        ctx.fillStyle = "rgba(0,0,0,0.5)";
+        ctx.fillText(String(mph), CX + 2, textY + 2);
         ctx.fillStyle = "#ffffff";
         ctx.fillText(String(mph), CX, textY);
       }
@@ -280,7 +280,7 @@ export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayPr
         ref={canvasRef}
         width={CVS_W}
         height={CVS_H}
-        className="absolute bottom-[5%] left-1/2 -translate-x-1/2"
+        className="absolute bottom-0 left-1/2 -translate-x-1/2"
         style={{
           width: "55%",
           imageRendering: "auto",
