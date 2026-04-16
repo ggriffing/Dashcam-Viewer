@@ -29,7 +29,7 @@ const SPEED_FOR_MAX = 30;
 
 const N_ARROWS = 5;
 const ARROW_SPACING = 1.0;
-const ARROW_THICKNESS = 0.35;
+const ARROW_THICKNESS = 0.55;
 const SCROLL_SCALE = 40;
 const LATERAL_SCALE = 0.05;
 const LATERAL_MAX = 0.22;
@@ -194,7 +194,7 @@ export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayPr
 
         if (driveState === "coast") {
           ctx.fillStyle = BLUE;
-          ctx.globalAlpha = 0.45;
+          ctx.globalAlpha = 0.55;
           drawTrap(ctx, g, lateral);
           ctx.fill();
         } else {
@@ -204,7 +204,7 @@ export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayPr
           const pointUp = driveState === "brake";
 
           ctx.fillStyle = BLUE;
-          ctx.globalAlpha = 0.60;
+          ctx.globalAlpha = 0.80;
 
           ctx.save();
           drawTrap(ctx, g, lateral);
