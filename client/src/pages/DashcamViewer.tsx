@@ -362,6 +362,7 @@ export default function DashcamViewer() {
               cameras={cameras}
               currentFrame={currentFrame}
               frontMetadata={currentMetadata}
+              isPlaying={isPlaying}
             />
 
             {gpsPath.some((p) => p.lat !== 0 || p.lng !== 0) && (

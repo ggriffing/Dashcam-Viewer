@@ -3,23 +3,19 @@ import type { SeiMetadataRaw } from "@/lib/dashcam/types";
 
 interface FrontCameraOverlayProps {
   metadata: SeiMetadataRaw | null;
+  isPlaying: boolean;
 }
 
-// ── Viewport & tile geometry ──────────────────────────────────────────────────
 const SVG_W  = 520;
 const CX     = SVG_W / 2;
-const SVG_H  = 130;   // visible window height
-const TILE_H = SVG_H; // one seamless tile = one viewport height
+const SVG_H  = 130;
+const TILE_H = SVG_H;
 
-// Perspective-tapered rows: top = farthest/narrowest, bottom = closest/widest.
-// hw:ch ≈ 10:1 simulates road-marking foreshortening.
-const ROWS = [
-  { hw: 75,  ch: 8,  thick: 4,  shadowDY: 3 },
-  { hw: 110, ch: 11, thick: 6,  shadowDY: 4 },
-  { hw: 160, ch: 16, thick: 8,  shadowDY: 6 },
-  { hw: 220, ch: 22, thick: 10, shadowDY: 8 },
-] as const;
-const ROW_Y = [5, 25, 53, 92] as const;
+const HW    = 200;
+const CH    = 14;
+const THICK = 6;
+const SHADOW_DY = 4;
+const ROW_Y = [10, 40, 70, 100] as const;
 
 function makeChevronPath(hw: number, ch: number, thick: number, y: number): string {
   const tipInner = Math.round(thick * ch / hw);
@@ -29,40 +25,38 @@ function makeChevronPath(hw: number, ch: number, thick: number, y: number): stri
   );
 }
 
-// Three copies of the pattern stacked vertically — the rAF loop scrolls through
-// them and wraps modulo TILE_H so the seam is invisible.
 const N_TILES = 3;
 const TILED_MAIN: string[]   = [];
 const TILED_SHADOW: string[] = [];
 for (let tile = 0; tile < N_TILES; tile++) {
   const dy = tile * TILE_H;
-  for (let i = 0; i < ROWS.length; i++) {
-    const r = ROWS[i];
+  for (let i = 0; i < ROW_Y.length; i++) {
     const y = ROW_Y[i] + dy;
-    TILED_MAIN.push(makeChevronPath(r.hw, r.ch, r.thick, y));
-    TILED_SHADOW.push(makeChevronPath(r.hw, r.ch, r.thick, y + r.shadowDY));
+    TILED_MAIN.push(makeChevronPath(HW, CH, THICK, y));
+    TILED_SHADOW.push(makeChevronPath(HW, CH, THICK, y + SHADOW_DY));
   }
 }
 
-// ── Colors ────────────────────────────────────────────────────────────────────
-const BRAKE_COLOR  = "#38BDF8"; // sky blue  — braking
-const ACCEL_COLOR  = "#F59E0B"; // amber     — accelerating
-const GREY_COLOR   = "#888888"; // neutral   — low intensity
-const SHADOW_COLOR = "#0F2444"; // dark navy — 3-D depth
+const BRAKE_COLOR  = "#38BDF8";
+const ACCEL_COLOR  = "#F59E0B";
+const GREY_COLOR   = "#888888";
+const SHADOW_COLOR = "#0F2444";
 
-// Opacity ranges: scales with intensity (litCount/4)
 const MAX_FILL_OP   = 0.92;
 const MIN_FILL_OP   = 0.42;
 const MAX_SHADOW_OP = 0.65;
 const MIN_SHADOW_OP = 0.12;
 
-// ── Animation constants ───────────────────────────────────────────────────────
-// positive velocity = scroll downward (accel), negative = upward (braking)
-const SCROLL_SCALE  = 22;  // SVG px/s per m/s² of longitudinal accel
-const LATERAL_SCALE = 8;   // SVG px per m/s² of lateral accel
-const LATERAL_MAX   = 28;  // max lateral offset in SVG px
+const SCROLL_SCALE  = 22;
+const LATERAL_SCALE = 8;
+const LATERAL_MAX   = 28;
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+const AUTOPILOT_LABELS: Record<number, string> = {
+  1: "Self-Driving",
+  2: "Autosteer",
+  3: "TACC",
+};
+
 function lerpColor(from: string, to: string, t: number): string {
   const p = (s: string, o: number) => parseInt(s.slice(o, o + 2), 16);
   const r = Math.round(p(from, 1) + (p(to, 1) - p(from, 1)) * t);
@@ -103,29 +97,24 @@ function getState(m: SeiMetadataRaw): { state: DriveState; litCount: number; ax:
   return { state: "coast", litCount: 0, ax: 0 };
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
 const OVERLAY_STYLE: React.CSSProperties = { paddingBottom: "8%" };
 
-export function FrontCameraOverlay({ metadata }: FrontCameraOverlayProps) {
-  const uid = useId(); // unique per instance — avoids clipPath id collision if multiple instances render
+export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayProps) {
+  const uid = useId();
   const clipId = `chev-clip-${uid}`;
 
-  // Refs written by React render, read by rAF loop — no React re-renders per frame
   const groupRef       = useRef<SVGGElement | null>(null);
-  const scrollRef      = useRef(0);   // current scroll accumulator (SVG px)
-  const velocityRef    = useRef(0);   // actual px/s (smoothed toward target)
-  const targetVelRef   = useRef(0);   // target px/s set by React render
-  const lateralRef     = useRef(0);   // horizontal offset in SVG px
+  const scrollRef      = useRef(0);
+  const velocityRef    = useRef(0);
+  const targetVelRef   = useRef(0);
+  const lateralRef     = useRef(0);
   const rafRef         = useRef<number | null>(null);
   const lastTimeRef    = useRef<number | null>(null);
 
-  // Animation loop: starts on mount, runs for the lifetime of the component.
-  // Writes SVG transform directly — zero React overhead per frame.
   useEffect(() => {
     function frame(time: number) {
       if (lastTimeRef.current !== null) {
-        const dt = Math.min((time - lastTimeRef.current) / 1000, 0.05); // cap at 50 ms
-        // Smooth velocity toward target (time constant ~200 ms for natural coast-out)
+        const dt = Math.min((time - lastTimeRef.current) / 1000, 0.05);
         const decay = Math.min(1, dt * 5);
         velocityRef.current += (targetVelRef.current - velocityRef.current) * decay;
         scrollRef.current += velocityRef.current * dt;
@@ -133,7 +122,6 @@ export function FrontCameraOverlay({ metadata }: FrontCameraOverlayProps) {
       lastTimeRef.current = time;
 
       if (groupRef.current) {
-        // Keep offset in [0, TILE_H) and bias by -TILE_H so middle tile is visible
         const wrapped = ((scrollRef.current % TILE_H) + TILE_H) % TILE_H;
         const ty = -(TILE_H + wrapped);
         groupRef.current.setAttribute(
@@ -151,7 +139,6 @@ export function FrontCameraOverlay({ metadata }: FrontCameraOverlayProps) {
     };
   }, []);
 
-  // ── Telemetry decode (runs each React render = each video frame) ──
   const noData = !metadata || !hasData(metadata);
   const speed  = metadata?.vehicleSpeedMps ?? -1;
 
@@ -170,53 +157,65 @@ export function FrontCameraOverlay({ metadata }: FrontCameraOverlayProps) {
     if (state !== "coast") visible = true;
   }
 
-  // Push new physics values to refs — rAF loop reads them next frame.
-  // Negated: positive ax (accel) → negative velocity → scrollRef decreases →
-  // wrapped decreases → ty becomes less negative → group moves DOWN (toward horizon) ✓
-  // Negative ax (braking) → positive velocity → group moves UP (toward camera) ✓
-  targetVelRef.current = visible ? -ax * SCROLL_SCALE : 0;
-  lateralRef.current  = Math.max(-LATERAL_MAX, Math.min(LATERAL_MAX, ay * LATERAL_SCALE));
+  targetVelRef.current = (visible && isPlaying) ? -ax * SCROLL_SCALE : 0;
+  lateralRef.current   = Math.max(-LATERAL_MAX, Math.min(LATERAL_MAX, ay * LATERAL_SCALE));
 
-  // Visual properties — ok to update at video-frame rate via React render
-  const colorT        = litCount / 4; // 0.25 → 1.0
+  const colorT        = litCount / 4;
   const activeColor   = state === "brake" ? BRAKE_COLOR : ACCEL_COLOR;
   const fillColor     = visible ? lerpColor(GREY_COLOR, activeColor, colorT) : GREY_COLOR;
   const fillOpacity   = lerp(MIN_FILL_OP,   MAX_FILL_OP,   colorT);
   const shadowOpacity = lerp(MIN_SHADOW_OP, MAX_SHADOW_OP, colorT);
 
-  return (
-    <div
-      className="absolute inset-0 flex items-end justify-center pointer-events-none"
-      style={{
-        ...OVERLAY_STYLE,
-        opacity: visible ? 1 : 0,
-        transition: "opacity 120ms ease-out",
-      }}
-    >
-      <svg
-        viewBox={`0 0 ${SVG_W} ${SVG_H}`}
-        width="62%"
-        style={{ display: "block", overflow: "hidden" }}
-      >
-        <defs>
-          <clipPath id={clipId}>
-            <rect x="0" y="0" width={SVG_W} height={SVG_H} />
-          </clipPath>
-        </defs>
+  const autopilotState = metadata?.autopilotState ?? 0;
+  const autopilotLabel = AUTOPILOT_LABELS[autopilotState];
+  const metaVersion    = metadata?.version;
 
-        {/* Clip to viewport so tiles entering/exiting are hidden cleanly */}
-        <g clipPath={`url(#${clipId})`}>
-          {/* groupRef gets translate(lateralX, scrollY) written by rAF each frame */}
-          <g ref={groupRef} transform={`translate(0,${-TILE_H})`}>
-            {TILED_SHADOW.map((d, i) => (
-              <path key={`s${i}`} d={d} fill={SHADOW_COLOR} fillOpacity={shadowOpacity} />
-            ))}
-            {TILED_MAIN.map((d, i) => (
-              <path key={`m${i}`} d={d} fill={fillColor} fillOpacity={fillOpacity} />
-            ))}
+  return (
+    <div className="absolute inset-0 pointer-events-none">
+      {autopilotLabel && (
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-sm border border-white/15" data-testid="autopilot-badge">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#38BDF8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" />
+            <path d="M12 6v6l4 2" />
+          </svg>
+          <span className="text-[11px] font-medium text-sky-300 whitespace-nowrap tracking-wide">
+            {autopilotLabel}
+            {metaVersion !== undefined && metaVersion > 0 && ` v${metaVersion}`}
+          </span>
+        </div>
+      )}
+
+      <div
+        className="absolute inset-0 flex items-end justify-center"
+        style={{
+          ...OVERLAY_STYLE,
+          opacity: visible ? 1 : 0,
+          transition: "opacity 120ms ease-out",
+        }}
+      >
+        <svg
+          viewBox={`0 0 ${SVG_W} ${SVG_H}`}
+          width="62%"
+          style={{ display: "block", overflow: "hidden" }}
+        >
+          <defs>
+            <clipPath id={clipId}>
+              <rect x="0" y="0" width={SVG_W} height={SVG_H} />
+            </clipPath>
+          </defs>
+
+          <g clipPath={`url(#${clipId})`}>
+            <g ref={groupRef} transform={`translate(0,${-TILE_H})`}>
+              {TILED_SHADOW.map((d, i) => (
+                <path key={`s${i}`} d={d} fill={SHADOW_COLOR} fillOpacity={shadowOpacity} />
+              ))}
+              {TILED_MAIN.map((d, i) => (
+                <path key={`m${i}`} d={d} fill={fillColor} fillOpacity={fillOpacity} />
+              ))}
+            </g>
           </g>
-        </g>
-      </svg>
+        </svg>
+      </div>
     </div>
   );
 }

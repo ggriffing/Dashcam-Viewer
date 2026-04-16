@@ -13,6 +13,7 @@ interface VideoGridProps {
   cameras: CameraData[];
   currentFrame: number;
   frontMetadata?: SeiMetadataRaw | null;
+  isPlaying?: boolean;
 }
 
 export interface VideoGridHandle {
@@ -24,11 +25,13 @@ function CameraCell({
   currentFrame,
   overlayMetadata,
   playerRef,
+  isPlaying,
 }: {
   camera: CameraData;
   currentFrame: number;
   overlayMetadata?: SeiMetadataRaw | null;
   playerRef: (handle: VideoPlayerHandle | null) => void;
+  isPlaying?: boolean;
 }) {
   return (
     <div style={{ aspectRatio: '4/3', position: 'relative', width: '100%' }}>
@@ -41,6 +44,7 @@ function CameraCell({
           currentFrame={currentFrame}
           isActive={camera.isActive}
           overlayMetadata={overlayMetadata}
+          isPlaying={isPlaying}
         />
       </div>
     </div>
@@ -48,7 +52,7 @@ function CameraCell({
 }
 
 export const VideoGrid = forwardRef<VideoGridHandle, VideoGridProps>(
-  function VideoGrid({ cameras, currentFrame, frontMetadata }, ref) {
+  function VideoGrid({ cameras, currentFrame, frontMetadata, isPlaying }, ref) {
     const playerRefs = useRef<Map<CameraAngle, VideoPlayerHandle>>(new Map());
 
     const renderAllFrames = useCallback(async (frameIndex: number) => {
@@ -94,6 +98,7 @@ export const VideoGrid = forwardRef<VideoGridHandle, VideoGridProps>(
             currentFrame={currentFrame}
             overlayMetadata={camera.angle === "front" ? frontMetadata : undefined}
             playerRef={setPlayerRef(camera.angle)}
+            isPlaying={isPlaying}
           />
         ))}
 

@@ -9,6 +9,7 @@ interface VideoPlayerProps {
   currentFrame: number;
   isActive: boolean;
   overlayMetadata?: SeiMetadataRaw | null;
+  isPlaying?: boolean;
 }
 
 export interface VideoPlayerHandle {
@@ -24,7 +25,7 @@ const ANGLE_LABELS: Record<CameraAngle, string> = {
 };
 
 export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
-  function VideoPlayer({ angle, frames, config, currentFrame, isActive, overlayMetadata }, ref) {
+  function VideoPlayer({ angle, frames, config, currentFrame, isActive, overlayMetadata, isPlaying = false }, ref) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const decoderRef = useRef<VideoDecoder | null>(null);
     const decodingRef = useRef(false);
@@ -163,7 +164,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(
           {ANGLE_LABELS[angle]}
         </div>
         {angle === "front" && isActive && (
-          <FrontCameraOverlay metadata={overlayMetadata ?? null} />
+          <FrontCameraOverlay metadata={overlayMetadata ?? null} isPlaying={isPlaying} />
         )}
         {!isActive && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/80">
