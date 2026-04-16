@@ -108,12 +108,13 @@ const OVERLAY_STYLE: React.CSSProperties = { paddingBottom: "8%" };
 
 export function FrontCameraOverlay({ metadata }: FrontCameraOverlayProps) {
   // Refs written by React render, read by rAF loop — no React re-renders per frame
-  const groupRef    = useRef<SVGGElement | null>(null);
-  const scrollRef   = useRef(0);      // current scroll accumulator (SVG px)
-  const velocityRef = useRef(0);      // px/s; positive = down (accel), neg = up (braking)
-  const lateralRef  = useRef(0);      // horizontal offset in SVG px
-  const rafRef      = useRef<number | null>(null);
-  const lastTimeRef = useRef<number | null>(null);
+  const groupRef       = useRef<SVGGElement | null>(null);
+  const scrollRef      = useRef(0);   // current scroll accumulator (SVG px)
+  const velocityRef    = useRef(0);   // actual px/s (smoothed toward target)
+  const targetVelRef   = useRef(0);   // target px/s set by React render
+  const lateralRef     = useRef(0);   // horizontal offset in SVG px
+  const rafRef         = useRef<number | null>(null);
+  const lastTimeRef    = useRef<number | null>(null);
 
   // Animation loop: starts on mount, runs for the lifetime of the component.
   // Writes SVG transform directly — zero React overhead per frame.
@@ -121,6 +122,9 @@ export function FrontCameraOverlay({ metadata }: FrontCameraOverlayProps) {
     function frame(time: number) {
       if (lastTimeRef.current !== null) {
         const dt = Math.min((time - lastTimeRef.current) / 1000, 0.05); // cap at 50 ms
+        // Smooth velocity toward target (time constant ~200 ms for natural coast-out)
+        const decay = Math.min(1, dt * 5);
+        velocityRef.current += (targetVelRef.current - velocityRef.current) * decay;
         scrollRef.current += velocityRef.current * dt;
       }
       lastTimeRef.current = time;
@@ -163,8 +167,11 @@ export function FrontCameraOverlay({ metadata }: FrontCameraOverlayProps) {
     if (state !== "coast") visible = true;
   }
 
-  // Push new physics values to refs — rAF loop reads them next frame
-  velocityRef.current = visible ? ax * SCROLL_SCALE : 0;
+  // Push new physics values to refs — rAF loop reads them next frame.
+  // Negated: positive ax (accel) → negative velocity → scrollRef decreases →
+  // wrapped decreases → ty becomes less negative → group moves DOWN (toward horizon) ✓
+  // Negative ax (braking) → positive velocity → group moves UP (toward camera) ✓
+  targetVelRef.current = visible ? -ax * SCROLL_SCALE : 0;
   lateralRef.current  = Math.max(-LATERAL_MAX, Math.min(LATERAL_MAX, ay * LATERAL_SCALE));
 
   // Visual properties — ok to update at video-frame rate via React render
