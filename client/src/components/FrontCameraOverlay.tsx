@@ -28,8 +28,7 @@ const MAX_H = 170;
 const SPEED_FOR_MAX = 30;
 
 const N_ARROWS = 5;
-const ARROW_SPACING = 1.0;
-const ARROW_THICKNESS = 0.55;
+const ARROW_FILL_RATIO = 0.70;
 const SCROLL_SCALE = 40;
 const LATERAL_SCALE = 0.05;
 const LATERAL_MAX = 0.22;
@@ -109,51 +108,24 @@ function drawArrow(
   lateral: number,
   pointUp: boolean,
 ) {
-  const thickness = arrowH * ARROW_THICKNESS;
+  const apexY = pointUp ? apexYraw : apexYraw + arrowH;
+  const wingY = pointUp ? apexYraw + arrowH : apexYraw;
 
-  let outerApexY: number, outerWingY: number, innerApexY: number, innerWingY: number;
+  const cApex = Math.max(g.topY, Math.min(g.botY, apexY));
+  const cWing = Math.max(g.topY, Math.min(g.botY, wingY));
+  if (Math.abs(cApex - cWing) < 0.5) return;
 
-  if (pointUp) {
-    outerApexY = apexYraw;
-    outerWingY = apexYraw + arrowH;
-    innerApexY = apexYraw + thickness;
-    innerWingY = apexYraw + arrowH;
-  } else {
-    outerApexY = apexYraw + arrowH;
-    outerWingY = apexYraw;
-    innerApexY = apexYraw + arrowH - thickness;
-    innerWingY = apexYraw;
-  }
-
-  const clampAndDraw = (aY: number, wY: number) => {
-    const cAY = Math.max(g.topY, Math.min(g.botY, aY));
-    const cWY = Math.max(g.topY, Math.min(g.botY, wY));
-    if (Math.abs(cAY - cWY) < 0.5) return null;
-
-    const tA = (cAY - g.topY) / g.h;
-    const tW = (cWY - g.topY) / g.h;
-    const hwA = hwAt(g, tA);
-    const hwW = hwAt(g, tW);
-    const sA = sAt(tA, lateral);
-    const sW = sAt(tW, lateral);
-    return { cAY, cWY, hwA, hwW, sA, sW };
-  };
-
-  const outer = clampAndDraw(outerApexY, outerWingY);
-  const inner = clampAndDraw(innerApexY, innerWingY);
-  if (!outer) return;
+  const tApex = (cApex - g.topY) / g.h;
+  const tWing = (cWing - g.topY) / g.h;
+  const hwApex = hwAt(g, tApex);
+  const hwWing = hwAt(g, tWing);
+  const sApex = sAt(tApex, lateral);
+  const sWing = sAt(tWing, lateral);
 
   ctx.beginPath();
-  ctx.moveTo(CX + outer.sA, outer.cAY);
-  ctx.lineTo(CX + outer.hwW + outer.sW, outer.cWY);
-
-  if (inner) {
-    ctx.lineTo(CX + inner.hwW + inner.sW, inner.cWY);
-    ctx.lineTo(CX + inner.sA, inner.cAY);
-    ctx.lineTo(CX - inner.hwW + inner.sW, inner.cWY);
-  }
-
-  ctx.lineTo(CX - outer.hwW + outer.sW, outer.cWY);
+  ctx.moveTo(CX + sApex, cApex);
+  ctx.lineTo(CX + hwWing + sWing, cWing);
+  ctx.lineTo(CX - hwWing + sWing, cWing);
   ctx.closePath();
   ctx.fill();
 }
@@ -198,21 +170,23 @@ export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayPr
           drawTrap(ctx, g, lateral);
           ctx.fill();
         } else {
-          const arrowH = g.h * ARROW_SPACING / N_ARROWS;
-          const period = arrowH;
+          const slotH = g.h / N_ARROWS;
+          const arrowH = slotH * ARROW_FILL_RATIO;
+          const period = slotH;
           const offset = ((scrollRef.current % period) + period) % period;
           const pointUp = driveState === "brake";
 
           ctx.fillStyle = BLUE;
-          ctx.globalAlpha = 0.80;
+          ctx.globalAlpha = 0.85;
 
           ctx.save();
           drawTrap(ctx, g, lateral);
           ctx.clip();
 
           for (let i = -2; i < N_ARROWS + 3; i++) {
-            const apexY = g.topY + i * period - offset;
-            drawArrow(ctx, g, apexY, arrowH, lateral, pointUp);
+            const slotTop = g.topY + i * period - offset;
+            const arrowTop = slotTop + (slotH - arrowH) / 2;
+            drawArrow(ctx, g, arrowTop, arrowH, lateral, pointUp);
           }
           ctx.restore();
         }
