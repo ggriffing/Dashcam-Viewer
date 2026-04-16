@@ -33,9 +33,13 @@ function CameraCell({
   playerRef: (handle: VideoPlayerHandle | null) => void;
   isPlaying?: boolean;
 }) {
+  const ar = camera.config
+    ? `${camera.config.width} / ${camera.config.height}`
+    : '4 / 3';
+
   return (
     <div style={{
-      aspectRatio: '4/3',
+      aspectRatio: ar,
       position: 'relative',
       width: '100%',
       clipPath: 'inset(0)',

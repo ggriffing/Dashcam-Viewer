@@ -263,7 +263,7 @@ export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayPr
   const autopilotLabel = AUTOPILOT_LABELS[autopilotState];
 
   return (
-    <div className="absolute inset-0 pointer-events-none overflow-hidden">
+    <div className="absolute inset-0 pointer-events-none" style={{ clipPath: 'inset(0)', overflow: 'hidden' }}>
       {autopilotLabel && (
         <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-sm border border-white/15" data-testid="autopilot-badge">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#38BDF8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -283,6 +283,7 @@ export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayPr
         className="absolute bottom-0 left-1/2 -translate-x-1/2"
         style={{
           width: "55%",
+          maxHeight: "100%",
           imageRendering: "auto",
           opacity: visible ? 1 : 0,
           transition: "opacity 150ms ease-out",
