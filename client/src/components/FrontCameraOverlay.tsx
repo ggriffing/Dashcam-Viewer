@@ -15,20 +15,25 @@ const AUTOPILOT_LABELS: Record<number, string> = {
 const BLUE = "#3B8EEA";
 
 const CVS_W = 440;
-const CVS_H = 200;
+const CVS_H = 220;
 const CX = CVS_W / 2;
 
-const TRAP_TOP_HW = 55;
-const TRAP_BOT_HW = 200;
-const TRAP_TOP_Y = 15;
-const TRAP_BOT_Y = 190;
-const TRAP_H = TRAP_BOT_Y - TRAP_TOP_Y;
+const BOT_Y = 210;
+const BOT_HW = 200;
+const TOP_HW_MIN = 160;
+const TOP_HW_MAX = 50;
+
+const MIN_H = 30;
+const MAX_H = 180;
+const SPEED_FOR_MAX = 30;
 
 const N_STRIPES = 7;
-const GAP_RATIO = 0.40;
+const GAP_RATIO = 0.45;
 const SCROLL_SCALE = 40;
 const LATERAL_SCALE = 0.05;
 const LATERAL_MAX = 0.22;
+
+const ACCEL_THRESHOLD = 0.8;
 
 function hasData(m: SeiMetadataRaw): boolean {
   return (
@@ -44,80 +49,104 @@ type DriveState = "accel" | "brake" | "coast";
 function getState(m: SeiMetadataRaw): { state: DriveState; ax: number } {
   const rawAx = m.linearAccelerationMps2X;
   if (rawAx !== undefined) {
-    if (rawAx > 0.5) return { state: "accel", ax: rawAx };
-    if (rawAx < -0.5) return { state: "brake", ax: rawAx };
+    if (rawAx > ACCEL_THRESHOLD) return { state: "accel", ax: rawAx };
+    if (rawAx < -ACCEL_THRESHOLD) return { state: "brake", ax: rawAx };
     return { state: "coast", ax: 0 };
   }
   if (m.brakeApplied) return { state: "brake", ax: -3 };
   const pedal = m.acceleratorPedalPosition ?? 0;
-  if (pedal > 0.05) return { state: "accel", ax: pedal * 4 };
+  if (pedal > 0.08) return { state: "accel", ax: pedal * 4 };
   return { state: "coast", ax: 0 };
 }
 
-function hwAt(t: number): number {
-  return TRAP_TOP_HW + (TRAP_BOT_HW - TRAP_TOP_HW) * t;
+function clamp01(v: number): number {
+  return Math.max(0, Math.min(1, v));
 }
 
-function shiftAt(t: number, lateral: number): number {
+interface TrapGeom {
+  topY: number;
+  topHw: number;
+  botY: number;
+  botHw: number;
+  h: number;
+}
+
+function computeTrapGeom(speed: number, ax: number): TrapGeom {
+  const speedFrac = clamp01(speed / SPEED_FOR_MAX);
+  const accelBoost = clamp01(Math.abs(ax) / 5) * 15;
+  const h = MIN_H + (MAX_H - MIN_H) * speedFrac + accelBoost;
+  const topY = BOT_Y - h;
+  const hFrac = clamp01(h / MAX_H);
+  const topHw = TOP_HW_MIN + (TOP_HW_MAX - TOP_HW_MIN) * hFrac;
+  return { topY, topHw, botY: BOT_Y, botHw: BOT_HW, h };
+}
+
+function hwAt(g: TrapGeom, t: number): number {
+  return g.topHw + (g.botHw - g.topHw) * t;
+}
+
+function sAt(t: number, lateral: number): number {
   return lateral * t;
 }
 
-function drawTrapezoid(ctx: CanvasRenderingContext2D, lateral: number) {
-  const sTop = shiftAt(0, lateral);
-  const sBot = shiftAt(1, lateral);
+function drawTrap(ctx: CanvasRenderingContext2D, g: TrapGeom, lateral: number) {
+  const sTop = sAt(0, lateral);
+  const sBot = sAt(1, lateral);
   ctx.beginPath();
-  ctx.moveTo(CX - TRAP_BOT_HW + sBot, TRAP_BOT_Y);
-  ctx.lineTo(CX - TRAP_TOP_HW + sTop, TRAP_TOP_Y);
-  ctx.lineTo(CX + TRAP_TOP_HW + sTop, TRAP_TOP_Y);
-  ctx.lineTo(CX + TRAP_BOT_HW + sBot, TRAP_BOT_Y);
+  ctx.moveTo(CX - g.botHw + sBot, g.botY);
+  ctx.lineTo(CX - g.topHw + sTop, g.topY);
+  ctx.lineTo(CX + g.topHw + sTop, g.topY);
+  ctx.lineTo(CX + g.botHw + sBot, g.botY);
   ctx.closePath();
 }
 
-function drawStripe(
+function drawChevronStripe(
   ctx: CanvasRenderingContext2D,
-  y1: number,
-  y2: number,
+  g: TrapGeom,
+  y1raw: number,
+  y2raw: number,
   lateral: number,
-  chevronDip: number,
+  dipDir: number,
 ) {
-  const clampY1 = Math.max(TRAP_TOP_Y, Math.min(TRAP_BOT_Y, y1));
-  const clampY2 = Math.max(TRAP_TOP_Y, Math.min(TRAP_BOT_Y, y2));
-  if (clampY2 - clampY1 < 0.5) return;
+  const y1 = Math.max(g.topY, Math.min(g.botY, y1raw));
+  const y2 = Math.max(g.topY, Math.min(g.botY, y2raw));
+  if (y2 - y1 < 0.5) return;
 
-  const t1 = (clampY1 - TRAP_TOP_Y) / TRAP_H;
-  const t2 = (clampY2 - TRAP_TOP_Y) / TRAP_H;
-  const hw1 = hwAt(t1);
-  const hw2 = hwAt(t2);
-  const s1 = shiftAt(t1, lateral);
-  const s2 = shiftAt(t2, lateral);
+  const t1 = (y1 - g.topY) / g.h;
+  const t2 = (y2 - g.topY) / g.h;
+  const hw1 = hwAt(g, t1);
+  const hw2 = hwAt(g, t2);
+  const s1 = sAt(t1, lateral);
+  const s2 = sAt(t2, lateral);
 
   ctx.beginPath();
 
-  if (Math.abs(chevronDip) < 0.1) {
-    ctx.moveTo(CX - hw1 + s1, clampY1);
-    ctx.lineTo(CX + hw1 + s1, clampY1);
-    ctx.lineTo(CX + hw2 + s2, clampY2);
-    ctx.lineTo(CX - hw2 + s2, clampY2);
+  if (Math.abs(dipDir) < 0.01) {
+    ctx.moveTo(CX - hw1 + s1, y1);
+    ctx.lineTo(CX + hw1 + s1, y1);
+    ctx.lineTo(CX + hw2 + s2, y2);
+    ctx.lineTo(CX - hw2 + s2, y2);
   } else {
-    const midY = (clampY1 + clampY2) / 2 + chevronDip;
-    const tMid = Math.max(0, Math.min(1, (midY - TRAP_TOP_Y) / TRAP_H));
-    const hwM = hwAt(tMid);
-    const sM = shiftAt(tMid, lateral);
+    const dip = (y2 - y1) * 0.28 * dipDir;
+    const midY = (y1 + y2) / 2 + dip;
+    const tMid = clamp01((midY - g.topY) / g.h);
+    const hwM = hwAt(g, tMid);
+    const sM = sAt(tMid, lateral);
 
-    if (chevronDip > 0) {
-      ctx.moveTo(CX - hw1 + s1, clampY1);
-      ctx.lineTo(CX + hw1 + s1, clampY1);
+    if (dipDir > 0) {
+      ctx.moveTo(CX - hw1 + s1, y1);
+      ctx.lineTo(CX + hw1 + s1, y1);
       ctx.lineTo(CX + hwM + sM, midY);
-      ctx.lineTo(CX + hw2 + s2, clampY2);
-      ctx.lineTo(CX - hw2 + s2, clampY2);
+      ctx.lineTo(CX + hw2 + s2, y2);
+      ctx.lineTo(CX - hw2 + s2, y2);
       ctx.lineTo(CX - hwM + sM, midY);
     } else {
-      ctx.moveTo(CX - hw1 + s1, clampY1);
+      ctx.moveTo(CX - hw1 + s1, y1);
       ctx.lineTo(CX - hwM + sM, midY);
-      ctx.lineTo(CX + hw1 + s1, clampY1);
-      ctx.lineTo(CX + hw2 + s2, clampY2);
+      ctx.lineTo(CX + hw1 + s1, y1);
+      ctx.lineTo(CX + hw2 + s2, y2);
       ctx.lineTo(CX + hwM + sM, midY);
-      ctx.lineTo(CX - hw2 + s2, clampY2);
+      ctx.lineTo(CX - hw2 + s2, y2);
     }
   }
 
@@ -132,15 +161,12 @@ export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayPr
   const targetVelRef = useRef(0);
   const lateralRef = useRef(0);
   const stateRef = useRef<DriveState>("coast");
+  const geomRef = useRef<TrapGeom>(computeTrapGeom(0, 0));
   const visibleRef = useRef(false);
   const rafRef = useRef<number | null>(null);
   const lastTimeRef = useRef<number | null>(null);
 
   useEffect(() => {
-    const stripeH = TRAP_H / (N_STRIPES + (N_STRIPES - 1) * GAP_RATIO);
-    const gapH = stripeH * GAP_RATIO;
-    const period = stripeH + gapH;
-
     function frame(time: number) {
       if (lastTimeRef.current !== null) {
         const dt = Math.min((time - lastTimeRef.current) / 1000, 0.05);
@@ -158,36 +184,33 @@ export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayPr
       ctx.clearRect(0, 0, CVS_W, CVS_H);
 
       if (visibleRef.current) {
-        const lateral = lateralRef.current * (TRAP_BOT_HW * 2);
+        const lateral = lateralRef.current * (BOT_HW * 2);
         const driveState = stateRef.current;
+        const g = geomRef.current;
+
+        const stripeH = g.h / (N_STRIPES + (N_STRIPES - 1) * GAP_RATIO);
+        const gapH = stripeH * GAP_RATIO;
+        const period = stripeH + gapH;
 
         if (driveState === "coast") {
           ctx.fillStyle = BLUE;
-          ctx.globalAlpha = 0.40;
-          drawTrapezoid(ctx, lateral);
+          ctx.globalAlpha = 0.50;
+          drawTrap(ctx, g, lateral);
           ctx.fill();
-
-          ctx.globalAlpha = 0.55;
-          const offset = ((scrollRef.current % period) + period) % period;
-          for (let i = -1; i < N_STRIPES + 1; i++) {
-            const y1 = TRAP_TOP_Y + i * period - offset;
-            drawStripe(ctx, y1, y1 + stripeH, lateral, 0);
-          }
         } else {
           const offset = ((scrollRef.current % period) + period) % period;
-          const dipAmount = stripeH * 0.22;
-          const dip = driveState === "accel" ? dipAmount : -dipAmount;
+          const dipDir = driveState === "brake" ? -1 : 1;
 
           ctx.fillStyle = BLUE;
-          ctx.globalAlpha = 0.65;
+          ctx.globalAlpha = 0.60;
 
           ctx.save();
-          drawTrapezoid(ctx, lateral);
+          drawTrap(ctx, g, lateral);
           ctx.clip();
 
-          for (let i = -2; i < N_STRIPES + 2; i++) {
-            const y1 = TRAP_TOP_Y + i * period - offset;
-            drawStripe(ctx, y1, y1 + stripeH, lateral, dip);
+          for (let i = -2; i < N_STRIPES + 3; i++) {
+            const y1 = g.topY + i * period - offset;
+            drawChevronStripe(ctx, g, y1, y1 + stripeH, lateral, dipDir);
           }
           ctx.restore();
         }
@@ -211,7 +234,7 @@ export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayPr
   let ax = 0;
   let ay = 0;
 
-  if (!noData && speed > 0.5) {
+  if (!noData) {
     const r = getState(metadata!);
     state = r.state;
     ax = r.ax;
@@ -221,6 +244,7 @@ export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayPr
 
   visibleRef.current = visible;
   stateRef.current = state;
+  geomRef.current = computeTrapGeom(speed, ax);
   targetVelRef.current = (visible && isPlaying && state !== "coast") ? -ax * SCROLL_SCALE : 0;
   lateralRef.current = Math.max(-LATERAL_MAX, Math.min(LATERAL_MAX, ay * LATERAL_SCALE));
 
@@ -245,7 +269,7 @@ export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayPr
         ref={canvasRef}
         width={CVS_W}
         height={CVS_H}
-        className="absolute bottom-[4%] left-1/2 -translate-x-1/2"
+        className="absolute bottom-[2%] left-1/2 -translate-x-1/2"
         style={{
           width: "55%",
           imageRendering: "auto",
