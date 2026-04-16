@@ -177,7 +177,7 @@ export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayPr
           const pointUp = driveState === "brake";
 
           ctx.fillStyle = BLUE;
-          ctx.globalAlpha = 0.85;
+          ctx.globalAlpha = 1.0;
 
           ctx.save();
           drawTrap(ctx, g, lateral);
