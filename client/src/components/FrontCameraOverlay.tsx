@@ -100,7 +100,7 @@ function drawTrap(ctx: CanvasRenderingContext2D, g: TrapGeom, lateral: number) {
   ctx.closePath();
 }
 
-function drawArrow(
+function drawChevron(
   ctx: CanvasRenderingContext2D,
   g: TrapGeom,
   apexYraw: number,
@@ -113,21 +113,36 @@ function drawArrow(
 
   const cApex = Math.max(g.topY, Math.min(g.botY, apexY));
   const cWing = Math.max(g.topY, Math.min(g.botY, wingY));
-  if (Math.abs(cApex - cWing) < 0.5) return;
+  if (Math.abs(cApex - cWing) < 1) return;
 
   const tApex = (cApex - g.topY) / g.h;
   const tWing = (cWing - g.topY) / g.h;
-  const hwApex = hwAt(g, tApex);
   const hwWing = hwAt(g, tWing);
   const sApex = sAt(tApex, lateral);
   const sWing = sAt(tWing, lateral);
 
+  // Arm thickness: 38% of arrowH in Y, 30% of wing half-width in X
+  const armY = arrowH * 0.38;
+  const armX = hwWing * 0.30;
+
+  const innerApexYraw = pointUp ? apexY + armY : apexY - armY;
+  const cInnerApex = Math.max(g.topY, Math.min(g.botY, innerApexYraw));
+  const tInnerApex = (cInnerApex - g.topY) / g.h;
+  const sInnerApex = sAt(tInnerApex, lateral);
+  const hwInnerWing = Math.max(0, hwWing - armX);
+
   ctx.beginPath();
+  // Outer triangle — clockwise
   ctx.moveTo(CX + sApex, cApex);
   ctx.lineTo(CX + hwWing + sWing, cWing);
   ctx.lineTo(CX - hwWing + sWing, cWing);
   ctx.closePath();
-  ctx.fill();
+  // Inner triangle — counter-clockwise → creates hollow center via evenodd
+  ctx.moveTo(CX + sInnerApex, cInnerApex);
+  ctx.lineTo(CX - hwInnerWing + sWing, cWing);
+  ctx.lineTo(CX + hwInnerWing + sWing, cWing);
+  ctx.closePath();
+  ctx.fill("evenodd");
 }
 
 export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayProps) {
@@ -184,13 +199,13 @@ export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayPr
           ctx.globalAlpha = 0.35;
           ctx.fillRect(0, 0, CVS_W, CVS_H);
 
-          // Solid opaque bright-blue arrows on top
+          // Solid opaque bright-blue chevrons on top
           ctx.fillStyle = BLUE;
           ctx.globalAlpha = 1.0;
           for (let i = -2; i < N_ARROWS + 3; i++) {
             const slotTop = g.topY + i * period - offset;
             const arrowTop = slotTop + (slotH - arrowH) / 2;
-            drawArrow(ctx, g, arrowTop, arrowH, lateral, pointUp);
+            drawChevron(ctx, g, arrowTop, arrowH, lateral, pointUp);
           }
         }
 
