@@ -34,8 +34,13 @@ function CameraCell({
   isPlaying?: boolean;
 }) {
   return (
-    <div style={{ aspectRatio: '4/3', position: 'relative', width: '100%', overflow: 'hidden' }}>
-      <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
+    <div style={{
+      aspectRatio: '4/3',
+      position: 'relative',
+      width: '100%',
+      clipPath: 'inset(0)',
+    }}>
+      <div style={{ position: 'absolute', inset: 0 }}>
         <VideoPlayer
           ref={playerRef}
           angle={camera.angle}
@@ -83,15 +88,11 @@ export const VideoGrid = forwardRef<VideoGridHandle, VideoGridProps>(
 
     return (
       <div
-        className="w-full flex-shrink-0"
+        className="w-full"
         style={{
           display: 'grid',
           gridTemplateColumns: '1fr 1fr 1fr',
-          alignItems: 'start',
-          alignContent: 'start',
           gap: 0,
-          margin: 0,
-          padding: 0,
         }}
         data-testid="video-grid"
       >

@@ -356,24 +356,26 @@ export default function DashcamViewer() {
 
         {hasVideos && (
           <>
-            <VideoGrid
-              key={videoLoadKey}
-              ref={videoGridRef}
-              cameras={cameras}
-              currentFrame={currentFrame}
-              frontMetadata={currentMetadata}
-              isPlaying={isPlaying}
-            />
+            <div className="flex-1 min-h-0 flex flex-col overflow-y-auto">
+              <VideoGrid
+                key={videoLoadKey}
+                ref={videoGridRef}
+                cameras={cameras}
+                currentFrame={currentFrame}
+                frontMetadata={currentMetadata}
+                isPlaying={isPlaying}
+              />
 
-            {gpsPath.some((p) => p.lat !== 0 || p.lng !== 0) && (
-              <div className="flex-1 min-h-0 overflow-hidden" style={{ minHeight: 120, marginTop: 0 }}>
-                <MapView
-                  key={mapKey}
-                  path={gpsPath}
-                  currentIndex={currentFrame}
-                />
-              </div>
-            )}
+              {gpsPath.some((p) => p.lat !== 0 || p.lng !== 0) && (
+                <div className="flex-1 min-h-0 overflow-hidden" style={{ minHeight: 120 }}>
+                  <MapView
+                    key={mapKey}
+                    path={gpsPath}
+                    currentIndex={currentFrame}
+                  />
+                </div>
+              )}
+            </div>
 
             <PlaybackControls
               isPlaying={isPlaying}
