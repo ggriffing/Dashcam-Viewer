@@ -34,8 +34,8 @@ function CameraCell({
   isPlaying?: boolean;
 }) {
   return (
-    <div style={{ aspectRatio: '4/3', position: 'relative', width: '100%' }}>
-      <div style={{ position: 'absolute', inset: 0 }}>
+    <div style={{ aspectRatio: '4/3', position: 'relative', width: '100%', overflow: 'hidden' }}>
+      <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
         <VideoPlayer
           ref={playerRef}
           angle={camera.angle}
@@ -89,6 +89,9 @@ export const VideoGrid = forwardRef<VideoGridHandle, VideoGridProps>(
           gridTemplateColumns: '1fr 1fr 1fr',
           alignItems: 'start',
           alignContent: 'start',
+          gap: 0,
+          margin: 0,
+          padding: 0,
         }}
         data-testid="video-grid"
       >
