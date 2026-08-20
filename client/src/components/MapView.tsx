@@ -2,6 +2,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
+  loadGoogleMapsApi,
+  subscribeToGoogleMapsAuthFailure,
+} from "@/lib/googleMapsLoader";
+import {
   getGpsPositionAt,
   getMapPanelState,
   getUsableGpsPath,
@@ -17,106 +21,6 @@ interface MapViewProps {
 
 interface MapAvailability {
   available: boolean;
-}
-
-declare global {
-  interface Window {
-    __dashcamGoogleMapsInit?: () => void;
-    gm_authFailure?: () => void;
-  }
-}
-
-let googleMapsLoadPromise: Promise<void> | null = null;
-const GOOGLE_MAPS_LOAD_TIMEOUT_MS = 15_000;
-const googleMapsAuthFailureListeners = new Set<(message: string) => void>();
-let previousGoogleMapsAuthFailure: (() => void) | undefined;
-let isGoogleMapsAuthFailureHandlerInstalled = false;
-
-function subscribeToGoogleMapsAuthFailure(listener: (message: string) => void) {
-  if (!isGoogleMapsAuthFailureHandlerInstalled) {
-    previousGoogleMapsAuthFailure = window.gm_authFailure;
-    window.gm_authFailure = () => {
-      previousGoogleMapsAuthFailure?.();
-      googleMapsAuthFailureListeners.forEach((notify) => {
-        notify("Google Maps rejected the configured API key");
-      });
-    };
-    isGoogleMapsAuthFailureHandlerInstalled = true;
-  }
-
-  googleMapsAuthFailureListeners.add(listener);
-
-  return () => {
-    googleMapsAuthFailureListeners.delete(listener);
-    if (googleMapsAuthFailureListeners.size > 0 || !isGoogleMapsAuthFailureHandlerInstalled) {
-      return;
-    }
-
-    if (previousGoogleMapsAuthFailure) {
-      window.gm_authFailure = previousGoogleMapsAuthFailure;
-    } else {
-      delete window.gm_authFailure;
-    }
-    previousGoogleMapsAuthFailure = undefined;
-    isGoogleMapsAuthFailureHandlerInstalled = false;
-  };
-}
-
-function loadGoogleMapsApi(apiKey: string): Promise<void> {
-  if (window.google?.maps) {
-    return Promise.resolve();
-  }
-
-  if (googleMapsLoadPromise) {
-    return googleMapsLoadPromise;
-  }
-
-  const loader = new Promise<void>((resolve, reject) => {
-    const script = document.createElement("script");
-    let settled = false;
-    const timeout = window.setTimeout(
-      () => fail("Google Maps took too long to load"),
-      GOOGLE_MAPS_LOAD_TIMEOUT_MS,
-    );
-    const unsubscribeFromAuthFailure = subscribeToGoogleMapsAuthFailure((message) => fail(message));
-
-    const cleanup = () => {
-      window.clearTimeout(timeout);
-      unsubscribeFromAuthFailure();
-    };
-
-    const fail = (message: string) => {
-      if (settled) return;
-      settled = true;
-      script.remove();
-      cleanup();
-      reject(new Error(message));
-    };
-
-    window.__dashcamGoogleMapsInit = () => {
-      if (settled) return;
-      if (!window.google?.maps) {
-        fail("Google Maps did not initialize");
-        return;
-      }
-
-      settled = true;
-      cleanup();
-      resolve();
-    };
-
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&callback=__dashcamGoogleMapsInit`;
-    script.async = true;
-    script.defer = true;
-    script.onerror = () => fail("Google Maps script failed to load");
-    document.head.appendChild(script);
-  }).catch((error) => {
-    googleMapsLoadPromise = null;
-    throw error;
-  });
-
-  googleMapsLoadPromise = loader;
-  return loader;
 }
 
 const TESLA_MARKER_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 36" width="28" height="36">
