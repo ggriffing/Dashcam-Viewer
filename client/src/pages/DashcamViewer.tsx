@@ -447,6 +447,16 @@ export default function DashcamViewer() {
     setExportDialogOpen(true);
   }, [handlePause]);
 
+  const activeCameraCount = cameras.filter((camera) => camera.isActive).length;
+  const isSingleFrontCamera = activeCameraCount === 1
+    && cameras.some((camera) => camera.angle === "front" && camera.isActive);
+  const videoViewportClass = isSingleFrontCamera
+    ? "flex-1 min-h-0 overflow-y-auto"
+    : "flex-none";
+  const mapViewportClass = isSingleFrontCamera
+    ? "h-52 shrink-0 sm:h-64"
+    : "min-h-52 flex-1";
+
   return (
     <div className="relative h-screen flex flex-col bg-[#181818] overflow-hidden">
       <div className="absolute right-3 top-3 z-50 flex items-center gap-2 rounded-full border border-white/10 bg-black/70 px-3 py-1.5 text-xs text-white/75 shadow-lg backdrop-blur">
@@ -477,7 +487,7 @@ export default function DashcamViewer() {
         {hasVideos && (
           <>
             <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-              <div className="flex-1 min-h-0 overflow-y-auto">
+              <div className={videoViewportClass}>
                 <VideoGrid
                   key={videoLoadKey}
                   ref={videoGridRef}
@@ -488,7 +498,7 @@ export default function DashcamViewer() {
                 />
               </div>
 
-              <div className="h-52 shrink-0 overflow-hidden sm:h-64">
+              <div className={`${mapViewportClass} overflow-hidden`}>
                 <MapView
                   key={mapKey}
                   path={gpsPath}
