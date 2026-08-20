@@ -122,7 +122,7 @@ export function createGoogleMapsLoader(
       unsubscribeFromAuthFailure = subscribeToAuthFailure((message) => fail(message));
 
       runtime.__dashcamGoogleMapsInit = init;
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&callback=__dashcamGoogleMapsInit`;
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&loading=async&libraries=marker&callback=__dashcamGoogleMapsInit`;
       script.async = true;
       script.defer = true;
       script.onerror = () => fail("Google Maps script failed to load");

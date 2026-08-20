@@ -22,6 +22,7 @@ interface MapViewProps {
    * without exposing a real browser key or requesting Google from Preview.
    */
   apiKey?: string;
+  mapId?: string;
   mapsClient?: GoogleMapsClient;
 }
 
@@ -46,6 +47,7 @@ const TESLA_MARKER_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2
 </svg>`;
 
 const TESLA_MARKER_URL = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(TESLA_MARKER_SVG)}`;
+const DEFAULT_GOOGLE_MAP_ID = "63ac2b86b263753d3f12b01f";
 
 function MapStatus({ title, detail, testId }: { title: string; detail: string; testId: string }) {
   return (
@@ -64,10 +66,11 @@ export function MapView({
   path,
   currentIndex,
   apiKey: apiKeyOverride,
+  mapId: mapIdOverride,
   mapsClient = browserMapsClient,
 }: MapViewProps) {
   const mapDivRef = useRef<HTMLDivElement>(null);
-  const markerRef = useRef<google.maps.Marker | null>(null);
+  const markerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
   const [isReady, setIsReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -77,6 +80,7 @@ export function MapView({
     viteEnvironment.VITE_GOOGLE_API_KEY
   );
   const apiKey = apiKeyOverride ?? configuredApiKey;
+  const mapId = mapIdOverride ?? viteEnvironment.VITE_GOOGLE_MAP_ID ?? DEFAULT_GOOGLE_MAP_ID;
 
   const validPath = getUsableGpsPath(path);
   const hasGps = validPath.length > 0;
@@ -127,6 +131,7 @@ export function MapView({
 
     const map = new window.google.maps.Map(mapDivRef.current, {
       center: initialPos,
+      mapId,
       zoom: 16,
       disableDefaultUI: true,
       zoomControl: true,
@@ -144,14 +149,17 @@ export function MapView({
       map,
     });
 
-    const marker = new window.google.maps.Marker({
+    const markerContent = document.createElement("img");
+    markerContent.src = TESLA_MARKER_URL;
+    markerContent.alt = "Tesla vehicle position";
+    markerContent.width = 28;
+    markerContent.height = 36;
+    markerContent.style.display = "block";
+
+    const marker = new window.google.maps.marker.AdvancedMarkerElement({
       position: initialPos,
       map,
-      icon: {
-        url: TESLA_MARKER_URL,
-        scaledSize: new window.google.maps.Size(28, 36),
-        anchor: new window.google.maps.Point(14, 36),
-      },
+      content: markerContent,
       zIndex: 100,
     });
 
@@ -162,16 +170,16 @@ export function MapView({
     markerRef.current = marker;
 
     return () => {
-      marker.setMap(null);
+      marker.map = null;
       markerRef.current = null;
     };
-  }, [isReady, loadError, path]);
+  }, [isReady, loadError, mapId, path]);
 
   useEffect(() => {
     if (!markerRef.current || path.length === 0) return;
     const pos = getGpsPositionAt(path, currentIndex);
     if (pos) {
-      markerRef.current.setPosition(pos);
+      markerRef.current.position = pos;
     }
   }, [currentIndex, path]);
 

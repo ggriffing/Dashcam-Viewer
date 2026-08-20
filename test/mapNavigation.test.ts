@@ -277,6 +277,8 @@ describe("map navigation helpers", () => {
 
     assert.equal(environment.scripts.length, 1);
     assert.match(environment.scripts[0].src, /key=first-key/);
+    assert.match(environment.scripts[0].src, /loading=async/);
+    assert.match(environment.scripts[0].src, /libraries=marker/);
 
     environment.runtime.google = { maps: {} };
     environment.runtime.__dashcamGoogleMapsInit?.();
@@ -425,18 +427,39 @@ describe("map navigation helpers", () => {
         Polyline: function MockPolyline(options: unknown) {
           polylines.push(options);
         },
-        Marker: function MockMarker(options: { position: { lat: number; lng: number } }) {
-          markerPositions.push(options.position);
-          return {
-            setPosition: (position: { lat: number; lng: number }) => markerPositions.push(position),
-            setMap: (map: unknown) => markerMaps.push(map),
-          };
-        },
-        Size: function MockSize(width: number, height: number) {
-          return { width, height };
-        },
-        Point: function MockPoint(x: number, y: number) {
-          return { x, y };
+        marker: {
+          AdvancedMarkerElement: class MockAdvancedMarkerElement {
+            private currentMap: unknown;
+            private currentPosition: { lat: number; lng: number };
+
+            constructor(options: {
+              position: { lat: number; lng: number };
+              map: unknown;
+              content: HTMLElement;
+            }) {
+              assert.equal(options.content.tagName, "IMG");
+              this.position = options.position;
+              this.map = options.map;
+            }
+
+            get position() {
+              return this.currentPosition;
+            }
+
+            set position(position: { lat: number; lng: number }) {
+              this.currentPosition = position;
+              markerPositions.push(position);
+            }
+
+            get map() {
+              return this.currentMap;
+            }
+
+            set map(map: unknown) {
+              this.currentMap = map;
+              if (map === null) markerMaps.push(map);
+            }
+          },
         },
         LatLngBounds: function MockLatLngBounds() {
           return { extend: () => undefined };
@@ -455,6 +478,7 @@ describe("map navigation helpers", () => {
       assert.equal(polylines.length, 1);
       assert.equal(fittedBounds.length, 1);
       assert.deepEqual(markerPositions, [route[0]]);
+      assert.equal((mapInstances[0] as { options: { mapId: string } }).options.mapId, "63ac2b86b263753d3f12b01f");
 
       await harness.render(2);
       await waitFor(() => assert.deepEqual(markerPositions, [route[0], route[2]]));
