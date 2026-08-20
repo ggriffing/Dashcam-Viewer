@@ -1,3 +1,4 @@
 - [Authentication abuse limits](auth-abuse-limits.md) — successful auth must not clear the shared IP quota that protects sign-in and account creation.
 - [Authentication test isolation](auth-test-isolation.md) — rate-limit tests must separate username and origin dimensions to distinguish account throttles from shared IP quotas.
+- [Sign-out during session-store outages](signout-session-outages.md) — browser logout must proceed even when the local session database is temporarily unreachable.
 - [Tesla encrypted clips](tesla-encrypted-clips.md) — use temporary Tesla Viewer authorization and local raw AES-CBC decryption; never retain footage, keys, or passwords.

@@ -181,13 +181,23 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/auth/signout", (req, res, next) => {
+  app.post("/api/auth/signout", (req, res) => {
     req.session.destroy((error) => {
+      res.clearCookie("connect.sid", {
+        httpOnly: true,
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+      });
+
       if (error) {
-        next(error);
+        // Expiring the browser cookie still prevents the unavailable store's
+        // session from being used. Do not block a user from signing out when
+        // the session database has a transient network failure.
+        console.warn("[auth] session store was unavailable during sign-out; expired browser session cookie");
+        res.status(204).end();
         return;
       }
-      res.clearCookie("connect.sid");
+
       res.status(204).end();
     });
   });

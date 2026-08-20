@@ -49,17 +49,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signOut() {
+    const clearLocalSession = async () => {
+      try {
+        await apiRequest("POST", "/api/auth/signout");
+      } catch {
+        // Clerk sign-out must not be blocked by a transient failure in the
+        // legacy local-session store. The server also expires the cookie when
+        // it can reach the request, even if the backing store is unavailable.
+      } finally {
+        queryClient.setQueryData(authQueryKey, null);
+      }
+    };
+
     if (isSignedIn) {
       // Clear a legacy username/password session too. A browser can have both
       // session types after a user tries social sign-in, and leaving the local
       // session active would immediately sign them back into the viewer.
-      await apiRequest("POST", "/api/auth/signout");
-      queryClient.setQueryData(authQueryKey, null);
+      await clearLocalSession();
       await clerkSignOut({ redirectUrl: "/" });
       return;
     }
-    await apiRequest("POST", "/api/auth/signout");
-    queryClient.setQueryData(authQueryKey, null);
+    await clearLocalSession();
   }
 
   const socialUser = clerkUser

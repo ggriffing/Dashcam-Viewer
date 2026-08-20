@@ -21,6 +21,12 @@ if (!process.env.SESSION_SECRET) {
   throw new Error("SESSION_SECRET is required for authentication");
 }
 
+const sessionCookieOptions = {
+  httpOnly: true,
+  sameSite: "lax" as const,
+  secure: process.env.NODE_ENV === "production",
+};
+
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;
@@ -59,13 +65,23 @@ app.use(
     saveUninitialized: false,
     rolling: true,
     cookie: {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      ...sessionCookieOptions,
       maxAge: 30 * 24 * 60 * 60 * 1000,
     },
   }),
 );
+app.use((error: unknown, req: Request, res: Response, next: NextFunction) => {
+  if (req.method === "POST" && req.path === "/api/auth/signout" && !res.headersSent) {
+    // A temporary database or DNS outage must not prevent a user from
+    // invalidating the browser-held session identifier. Other requests retain
+    // normal error handling so outages cannot be mistaken for authorization.
+    console.warn("[auth] session store was unavailable before sign-out; expired browser session cookie");
+    res.clearCookie("connect.sid", sessionCookieOptions);
+    res.status(204).end();
+    return;
+  }
+  next(error);
+});
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
