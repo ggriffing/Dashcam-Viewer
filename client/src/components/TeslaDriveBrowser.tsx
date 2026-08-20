@@ -11,6 +11,7 @@ import {
   Video,
   FolderOpen,
   Trash2,
+  LockKeyhole,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -177,7 +178,14 @@ export function TeslaDriveBrowser({ onFilesSelected, isLoading }: TeslaDriveBrow
     });
   }, []);
 
-  const handleLoadEvent = useCallback(async (event: EventEntry) => {
+  const handleLoadEvent = useCallback(async (categoryKey: string, event: EventEntry) => {
+    if (categoryKey.toLowerCase() === "encryptedclips") {
+      setEventLoadError(
+        "These clips are encrypted by Tesla and cannot be played directly. Decrypt or download them with Tesla Dashcam Viewer, then drag the decrypted MP4 files into this page."
+      );
+      return;
+    }
+
     const selected = event.cameras.filter(c => checkedCameras.has(c.cameraName));
     if (selected.length === 0) return;
     setLoadingEvent(true);
@@ -487,7 +495,7 @@ interface DriveViewProps {
   onToggleCategory: (key: string) => void;
   onSelectEvent: (categoryKey: string, event: EventEntry) => void;
   onToggleCamera: (cameraName: string) => void;
-  onLoadEvent: (event: EventEntry) => void;
+  onLoadEvent: (categoryKey: string, event: EventEntry) => void;
   onRequestDelete: (categoryKey: string, event: EventEntry) => void;
   eventLoadError: string | null;
   onChangeDrive: () => void;
@@ -612,7 +620,7 @@ interface CategorySectionProps {
   onToggle: () => void;
   onSelectEvent: (event: EventEntry) => void;
   onToggleCamera: (cameraName: string) => void;
-  onLoadEvent: (event: EventEntry) => void;
+  onLoadEvent: (categoryKey: string, event: EventEntry) => void;
   onRequestDelete: (event: EventEntry) => void;
   canDelete: boolean;
   eventLoadError: string | null;
@@ -633,6 +641,8 @@ function CategorySection({
   canDelete,
   eventLoadError,
 }: CategorySectionProps) {
+  const isEncrypted = category.key.toLowerCase() === "encryptedclips";
+
   return (
     <div className="border-b border-[#393C41]/50 last:border-b-0">
       <button
@@ -648,6 +658,12 @@ function CategorySection({
           )}
           <FolderOpen className="w-4 h-4 text-white/50" />
           <span className="text-white font-medium text-sm">{category.label}</span>
+           {isEncrypted && (
+             <span className="inline-flex items-center gap-1 text-amber-300/80 text-xs">
+               <LockKeyhole className="w-3 h-3" />
+               Decryption required
+             </span>
+           )}
         </div>
         <span className="text-white/40 text-xs">{category.events.length} events</span>
       </button>
@@ -668,9 +684,10 @@ function CategorySection({
                 loadingEvent={loadingEvent}
                 onSelect={() => onSelectEvent(event)}
                 onToggleCamera={onToggleCamera}
-                onLoad={() => onLoadEvent(event)}
+                onLoad={() => onLoadEvent(category.key, event)}
                 onDelete={() => onRequestDelete(event)}
                 canDelete={canDelete}
+                isEncrypted={isEncrypted}
                 loadError={isSelected ? eventLoadError : null}
               />
             );
@@ -692,6 +709,7 @@ interface EventRowProps {
   onLoad: () => void;
   onDelete: () => void;
   canDelete: boolean;
+  isEncrypted: boolean;
   loadError: string | null;
 }
 
@@ -706,6 +724,7 @@ function EventRow({
   onLoad,
   onDelete,
   canDelete,
+  isEncrypted,
   loadError,
 }: EventRowProps) {
   const checkedCount = event.cameras.filter(c => checkedCameras.has(c.cameraName)).length;
@@ -738,9 +757,18 @@ function EventRow({
 
       {isSelected && (
         <div className="px-6 pb-4 pt-2 flex flex-col gap-3">
-          <p className="text-white/40 text-xs uppercase tracking-wider">Select cameras to load</p>
-          <div className="grid grid-cols-2 gap-2">
-            {event.cameras.map(cam => {
+          {isEncrypted ? (
+            <div className="rounded border border-amber-400/30 bg-amber-400/10 px-3 py-2.5 text-amber-100/85 text-xs flex items-start gap-2">
+              <LockKeyhole className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-300" />
+              <p>
+                Tesla encrypted these recordings. Decrypt or download them with Tesla Dashcam Viewer first, then drag the decrypted MP4 files into this page.
+              </p>
+            </div>
+          ) : (
+            <>
+              <p className="text-white/40 text-xs uppercase tracking-wider">Select cameras to load</p>
+              <div className="grid grid-cols-2 gap-2">
+                {event.cameras.map(cam => {
               const isChecked = checkedCameras.has(cam.cameraName);
               const colors = SLOT_COLORS[cam.slot];
               const hasConflict = slotConflicts.has(cam.slot);
@@ -780,50 +808,52 @@ function EventRow({
                   </span>
                 </label>
               );
-            })}
-          </div>
+                })}
+              </div>
 
-          {slotConflicts.size > 0 && (
-            <p className="text-amber-400/70 text-xs flex items-center gap-1.5">
-              <AlertCircle className="w-3 h-3 flex-shrink-0" />
-              Multiple cameras selected for the same slot — only the last one loaded will appear.
-            </p>
-          )}
-
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button
-              size="sm"
-              onClick={onLoad}
-              disabled={checkedCount === 0 || loadingEvent}
-              className="bg-[#E82127] hover:bg-[#E82127]/80 text-white"
-              data-testid="button-load-cameras"
-            >
-              {loadingEvent ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Loading…
-                </>
-              ) : (
-                <>
-                  <Check className="w-4 h-4 mr-2" />
-                  Load {checkedCount} Camera{checkedCount !== 1 ? "s" : ""}
-                </>
+              {slotConflicts.size > 0 && (
+                <p className="text-amber-400/70 text-xs flex items-center gap-1.5">
+                  <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                  Multiple cameras selected for the same slot — only the last one loaded will appear.
+                </p>
               )}
-            </Button>
-            {canDelete && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={onDelete}
-                disabled={loadingEvent}
-                className="border-red-500/40 text-red-400 hover:text-red-300 hover:border-red-400/60"
-                data-testid="button-delete-saved-clip"
-              >
-                <Trash2 className="w-4 h-4 mr-2" />
-                Delete
-              </Button>
-            )}
-          </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button
+                  size="sm"
+                  onClick={onLoad}
+                  disabled={checkedCount === 0 || loadingEvent}
+                  className="bg-[#E82127] hover:bg-[#E82127]/80 text-white"
+                  data-testid="button-load-cameras"
+                >
+                  {loadingEvent ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Loading…
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-4 h-4 mr-2" />
+                      Load {checkedCount} Camera{checkedCount !== 1 ? "s" : ""}
+                    </>
+                  )}
+                </Button>
+                {canDelete && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={onDelete}
+                    disabled={loadingEvent}
+                    className="border-red-500/40 text-red-400 hover:text-red-300 hover:border-red-400/60"
+                    data-testid="button-delete-saved-clip"
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete
+                  </Button>
+                )}
+              </div>
+            </>
+          )}
           {loadError && (
             <p className="text-red-400 text-xs flex items-start gap-1.5" data-testid="text-load-error">
               <AlertCircle className="w-3 h-3 flex-shrink-0 mt-0.5" />

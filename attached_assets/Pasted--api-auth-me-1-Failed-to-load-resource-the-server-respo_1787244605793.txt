@@ -1,0 +1,59 @@
+/api/auth/me:1  Failed to load resource: the server responded with a status of 401 ()
+index-DN9A6y1B.js:26 [TeslaCam scan] folders found in TeslaCam: Array(4)
+index-DN9A6y1B.js:26 [scanCategoryDir] SavedClips: 9 subfolder-events, 0 flat mp4 files
+index-DN9A6y1B.js:26 [TeslaCam scan] "SavedClips" → 9 events
+index-DN9A6y1B.js:26 [scanCategoryDir] RecentClips: 0 subfolder-events, 0 flat mp4 files
+index-DN9A6y1B.js:26 [TeslaCam scan] "RecentClips" → 0 events
+index-DN9A6y1B.js:26 [scanCategoryDir] SentryClips: 0 subfolder-events, 0 flat mp4 files
+index-DN9A6y1B.js:26 [TeslaCam scan] "SentryClips" → 0 events
+index-DN9A6y1B.js:26 [scanCategoryDir] EncryptedClips: 1 subfolder-events, 0 flat mp4 files
+index-DN9A6y1B.js:26 [TeslaCam scan] "EncryptedClips" → 1 events
+index-DN9A6y1B.js:26 [TeslaCam scan] final categories: Array(2)
+js?key=AIzaSyBQfd2xXl3TAy0865tGOZRz34ZGhxobtfA&callback=__gmapsInit:330 Google Maps JavaScript API has been loaded directly without loading=async. This can result in suboptimal performance. For best-practice loading patterns please see https://goo.gle/js-api-loading
+bha @ js?key=AIzaSyBQfd2xXl3TAy0865tGOZRz34ZGhxobtfA&callback=__gmapsInit:330
+js?key=AIzaSyBQfd2xXl3TAy0865tGOZRz34ZGhxobtfA&callback=__gmapsInit:432 As of February 21st, 2024, google.maps.Marker is deprecated. Please use google.maps.marker.AdvancedMarkerElement instead. At this time, google.maps.Marker is not scheduled to be discontinued, but google.maps.marker.AdvancedMarkerElement is recommended over google.maps.Marker. While google.maps.Marker will continue to receive bug fixes for any major regressions, existing bugs in google.maps.Marker will not be addressed. At least 12 months notice will be given before support is discontinued. Please see https://developers.google.com/maps/deprecations for additional details and https://developers.google.com/maps/documentation/javascript/advanced-markers/migration for the migration guide.
+Uk @ js?key=AIzaSyBQfd2xXl3TAy0865tGOZRz34ZGhxobtfA&callback=__gmapsInit:432
+index-DN9A6y1B.js:85 Failed to load 2026-08-19_14-03-22-front.mp4: Error: Box "moov" not found
+    at DashcamMP4.findBox (dashcam-mp4.js:36:15)
+    at DashcamMP4.getConfig (dashcam-mp4.js:53:27)
+    at index-DN9A6y1B.js:85:13543
+    at async index-DN9A6y1B.js:26:12446
+(anonymous) @ index-DN9A6y1B.js:85
+index-DN9A6y1B.js:85 Failed to load 2026-08-19_14-03-22-back.mp4: Error: Box "moov" not found
+    at DashcamMP4.findBox (dashcam-mp4.js:36:15)
+    at DashcamMP4.getConfig (dashcam-mp4.js:53:27)
+    at index-DN9A6y1B.js:85:13543
+    at async index-DN9A6y1B.js:26:12446
+(anonymous) @ index-DN9A6y1B.js:85
+index-DN9A6y1B.js:85 Failed to load 2026-08-19_14-03-22-left_repeater.mp4: Error: Box "moov" not found
+    at DashcamMP4.findBox (dashcam-mp4.js:36:15)
+    at DashcamMP4.getConfig (dashcam-mp4.js:53:27)
+    at index-DN9A6y1B.js:85:13543
+    at async index-DN9A6y1B.js:26:12446
+(anonymous) @ index-DN9A6y1B.js:85
+index-DN9A6y1B.js:85 Failed to load 2026-08-19_14-03-22-left_pillar.mp4: Error: Box "moov" not found
+    at DashcamMP4.findBox (dashcam-mp4.js:36:15)
+    at DashcamMP4.getConfig (dashcam-mp4.js:53:27)
+    at index-DN9A6y1B.js:85:13543
+    at async index-DN9A6y1B.js:26:12446
+(anonymous) @ index-DN9A6y1B.js:85
+index-DN9A6y1B.js:85 Failed to load 2026-08-19_14-03-22-right_repeater.mp4: Error: Box "moov" not found
+    at DashcamMP4.findBox (dashcam-mp4.js:36:15)
+    at DashcamMP4.getConfig (dashcam-mp4.js:53:27)
+    at index-DN9A6y1B.js:85:13543
+    at async index-DN9A6y1B.js:26:12446
+(anonymous) @ index-DN9A6y1B.js:85
+index-DN9A6y1B.js:85 Failed to load 2026-08-19_14-03-22-right_pillar.mp4: Error: Box "moov" not found
+    at DashcamMP4.findBox (dashcam-mp4.js:36:15)
+    at DashcamMP4.getConfig (dashcam-mp4.js:53:27)
+    at index-DN9A6y1B.js:85:13543
+    at async index-DN9A6y1B.js:26:12446
+(anonymous) @ index-DN9A6y1B.js:85
+index-DN9A6y1B.js:85 Error loading files: Error: Could not load camera video from: 2026-08-19_14-03-22-front.mp4, 2026-08-19_14-03-22-back.mp4, 2026-08-19_14-03-22-left_repeater.mp4, 2026-08-19_14-03-22-left_pillar.mp4, 2026-08-19_14-03-22-right_repeater.mp4, 2026-08-19_14-03-22-right_pillar.mp4.
+    at index-DN9A6y1B.js:85:14070
+    at async index-DN9A6y1B.js:26:12446
+(anonymous) @ index-DN9A6y1B.js:85
+index-DN9A6y1B.js:26 Failed to read camera files: Error: Could not load camera video from: 2026-08-19_14-03-22-front.mp4, 2026-08-19_14-03-22-back.mp4, 2026-08-19_14-03-22-left_repeater.mp4, 2026-08-19_14-03-22-left_pillar.mp4, 2026-08-19_14-03-22-right_repeater.mp4, 2026-08-19_14-03-22-right_pillar.mp4.
+    at index-DN9A6y1B.js:85:14070
+    at async index-DN9A6y1B.js:26:12446
+(anonymous) @ index-DN9A6y1B.js:26
