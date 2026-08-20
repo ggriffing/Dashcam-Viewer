@@ -1,10 +1,10 @@
 import { useEffect, useRef, forwardRef, useImperativeHandle, useCallback } from "react";
-import type { CameraAngle, VideoFrame, VideoConfig, DashcamMP4, SeiMetadataRaw } from "@/lib/dashcam/types";
+import type { CameraAngle, VideoFrame as DashcamVideoFrame, VideoConfig, DashcamMP4, SeiMetadataRaw } from "@/lib/dashcam/types";
 import { FrontCameraOverlay } from "./FrontCameraOverlay";
 
 interface VideoPlayerProps {
   angle: CameraAngle;
-  frames: VideoFrame[];
+  frames: DashcamVideoFrame[];
   config: VideoConfig | null;
   currentFrame: number;
   isActive: boolean;

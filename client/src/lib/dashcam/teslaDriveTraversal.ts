@@ -205,7 +205,7 @@ async function scanCategoryDir(
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key)!.push({ name, handle });
     }
-    for (const [eventName, files] of groups) {
+    groups.forEach((files, eventName) => {
       const seen = new Set<string>();
       const cameras: CameraEntry[] = [];
       for (const { name, handle } of files) {
@@ -225,7 +225,7 @@ async function scanCategoryDir(
         return (ai < 0 ? 99 : ai) - (bi < 0 ? 99 : bi);
       });
       if (cameras.length > 0) events.push({ name: eventName, cameras });
-    }
+    });
     console.log(`[scanCategoryDir] ${categoryHandle.name}: regrouped flat files → ${events.length} events`);
   }
 
