@@ -476,15 +476,17 @@ export default function DashcamViewer() {
 
         {hasVideos && (
           <>
-            <div className="flex-1 min-h-0 flex flex-col overflow-y-auto">
-              <VideoGrid
-                key={videoLoadKey}
-                ref={videoGridRef}
-                cameras={cameras}
-                currentFrame={currentFrame}
-                frontMetadata={currentMetadata}
-                isPlaying={isPlaying}
-              />
+            <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+              <div className="flex-1 min-h-0 overflow-y-auto">
+                <VideoGrid
+                  key={videoLoadKey}
+                  ref={videoGridRef}
+                  cameras={cameras}
+                  currentFrame={currentFrame}
+                  frontMetadata={currentMetadata}
+                  isPlaying={isPlaying}
+                />
+              </div>
 
               <div className="h-52 shrink-0 overflow-hidden sm:h-64">
                 <MapView

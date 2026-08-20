@@ -8,7 +8,7 @@
     "build": "tsx script/build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
     "pretest": "npm run db:push",
-    "test": "tsx --test test/auth.test.ts test/mapNavigation.test.ts test/teslaEncryptedClip.test.ts",
+    "test": "tsx --test test/auth.test.ts test/mapNavigation.test.ts test/teslaEncryptedClip.test.ts test/videoLayout.test.ts",
     "check": "tsc",
     "db:push": "drizzle-kit push"
   },
