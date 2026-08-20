@@ -486,15 +486,13 @@ export default function DashcamViewer() {
                 isPlaying={isPlaying}
               />
 
-              {gpsPath.some((p) => p.lat !== 0 || p.lng !== 0) && (
-                <div className="flex-1 min-h-0 overflow-hidden" style={{ minHeight: 120 }}>
-                  <MapView
-                    key={mapKey}
-                    path={gpsPath}
-                    currentIndex={currentFrame}
-                  />
-                </div>
-              )}
+              <div className="h-52 shrink-0 overflow-hidden sm:h-64">
+                <MapView
+                  key={mapKey}
+                  path={gpsPath}
+                  currentIndex={currentFrame}
+                />
+              </div>
             </div>
 
             <PlaybackControls

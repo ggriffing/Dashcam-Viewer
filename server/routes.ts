@@ -6,6 +6,7 @@ import { verifyPassword } from "./password";
 import { createAuthRateLimiter } from "./authRateLimit";
 import { getAuth } from "@clerk/express";
 import { z } from "zod";
+import { hasGoogleMapsApiKey } from "@shared/mapNavigation";
 
 declare module "express-session" {
   interface SessionData {
@@ -194,8 +195,7 @@ export async function registerRoutes(
   // Lightweight capability check — tells the client whether the server has a
   // Maps API key configured, so the UI can show or hide the map overlay option.
   app.get("/api/map-available", requireAuth, (_req, res) => {
-    const hasKey = !!(process.env.VITE_GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_API_KEY);
-    res.json({ available: hasKey });
+    res.json({ available: hasGoogleMapsApiKey(process.env) });
   });
 
   /**

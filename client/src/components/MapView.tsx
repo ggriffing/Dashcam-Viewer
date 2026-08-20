@@ -1,55 +1,122 @@
 /// <reference types="google.maps" />
 import { useEffect, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  getGpsPositionAt,
+  getMapPanelState,
+  getUsableGpsPath,
+  type LatLng,
+} from "@shared/mapNavigation";
 
-export interface LatLng {
-  lat: number;
-  lng: number;
-}
+export type { LatLng } from "@shared/mapNavigation";
 
 interface MapViewProps {
   path: LatLng[];
   currentIndex: number;
 }
 
+interface MapAvailability {
+  available: boolean;
+}
+
 declare global {
   interface Window {
-    __gmapsInitCallbacks?: Array<() => void>;
-    __gmapsScriptLoading?: boolean;
-    __gmapsInit?: () => void;
+    __dashcamGoogleMapsInit?: () => void;
+    gm_authFailure?: () => void;
   }
 }
 
-function loadGoogleMapsApi(apiKey: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (window.google?.maps) {
-      resolve();
+let googleMapsLoadPromise: Promise<void> | null = null;
+const GOOGLE_MAPS_LOAD_TIMEOUT_MS = 15_000;
+const googleMapsAuthFailureListeners = new Set<(message: string) => void>();
+let previousGoogleMapsAuthFailure: (() => void) | undefined;
+let isGoogleMapsAuthFailureHandlerInstalled = false;
+
+function subscribeToGoogleMapsAuthFailure(listener: (message: string) => void) {
+  if (!isGoogleMapsAuthFailureHandlerInstalled) {
+    previousGoogleMapsAuthFailure = window.gm_authFailure;
+    window.gm_authFailure = () => {
+      previousGoogleMapsAuthFailure?.();
+      googleMapsAuthFailureListeners.forEach((notify) => {
+        notify("Google Maps rejected the configured API key");
+      });
+    };
+    isGoogleMapsAuthFailureHandlerInstalled = true;
+  }
+
+  googleMapsAuthFailureListeners.add(listener);
+
+  return () => {
+    googleMapsAuthFailureListeners.delete(listener);
+    if (googleMapsAuthFailureListeners.size > 0 || !isGoogleMapsAuthFailureHandlerInstalled) {
       return;
     }
 
-    if (!window.__gmapsInitCallbacks) {
-      window.__gmapsInitCallbacks = [];
+    if (previousGoogleMapsAuthFailure) {
+      window.gm_authFailure = previousGoogleMapsAuthFailure;
+    } else {
+      delete window.gm_authFailure;
     }
-    window.__gmapsInitCallbacks.push(resolve);
+    previousGoogleMapsAuthFailure = undefined;
+    isGoogleMapsAuthFailureHandlerInstalled = false;
+  };
+}
 
-    if (!window.__gmapsScriptLoading) {
-      window.__gmapsScriptLoading = true;
-      window.__gmapsInit = () => {
-        window.__gmapsInitCallbacks?.forEach((cb) => cb());
-        window.__gmapsInitCallbacks = [];
-      };
-      const script = document.createElement("script");
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&callback=__gmapsInit`;
-      script.async = true;
-      script.defer = true;
-      script.onerror = () => {
-        console.error("[MapView] Failed to load Google Maps JavaScript API. Check that VITE_GOOGLE_MAPS_API_KEY is valid and the Maps JavaScript API is enabled.");
-        window.__gmapsScriptLoading = false;
-        window.__gmapsInitCallbacks = [];
-        reject(new Error("Google Maps script failed to load"));
-      };
-      document.head.appendChild(script);
-    }
+function loadGoogleMapsApi(apiKey: string): Promise<void> {
+  if (window.google?.maps) {
+    return Promise.resolve();
+  }
+
+  if (googleMapsLoadPromise) {
+    return googleMapsLoadPromise;
+  }
+
+  const loader = new Promise<void>((resolve, reject) => {
+    const script = document.createElement("script");
+    let settled = false;
+    const timeout = window.setTimeout(
+      () => fail("Google Maps took too long to load"),
+      GOOGLE_MAPS_LOAD_TIMEOUT_MS,
+    );
+    const unsubscribeFromAuthFailure = subscribeToGoogleMapsAuthFailure((message) => fail(message));
+
+    const cleanup = () => {
+      window.clearTimeout(timeout);
+      unsubscribeFromAuthFailure();
+    };
+
+    const fail = (message: string) => {
+      if (settled) return;
+      settled = true;
+      script.remove();
+      cleanup();
+      reject(new Error(message));
+    };
+
+    window.__dashcamGoogleMapsInit = () => {
+      if (settled) return;
+      if (!window.google?.maps) {
+        fail("Google Maps did not initialize");
+        return;
+      }
+
+      settled = true;
+      cleanup();
+      resolve();
+    };
+
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&callback=__dashcamGoogleMapsInit`;
+    script.async = true;
+    script.defer = true;
+    script.onerror = () => fail("Google Maps script failed to load");
+    document.head.appendChild(script);
+  }).catch((error) => {
+    googleMapsLoadPromise = null;
+    throw error;
   });
+
+  googleMapsLoadPromise = loader;
+  return loader;
 }
 
 const TESLA_MARKER_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 36" width="28" height="36">
@@ -60,35 +127,76 @@ const TESLA_MARKER_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2
 
 const TESLA_MARKER_URL = `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(TESLA_MARKER_SVG)}`;
 
+function MapStatus({ title, detail, testId }: { title: string; detail: string; testId: string }) {
+  return (
+    <div
+      className="flex h-full w-full flex-col items-center justify-center gap-1 border-t border-[#393C41] bg-[#181818] px-4 text-center"
+      data-testid={testId}
+      aria-live="polite"
+    >
+      <span className="text-sm font-medium text-white/70">{title}</span>
+      <span className="max-w-lg text-xs text-white/40">{detail}</span>
+    </div>
+  );
+}
+
 export function MapView({ path, currentIndex }: MapViewProps) {
   const mapDivRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<google.maps.Map | null>(null);
   const markerRef = useRef<google.maps.Marker | null>(null);
   const [isReady, setIsReady] = useState(false);
-  const [loadError, setLoadError] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const apiKey = (
     (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined) ||
     (import.meta.env.VITE_GOOGLE_API_KEY as string | undefined)
   );
 
-  const validPath = path.filter((p) => p.lat !== 0 || p.lng !== 0);
+  const validPath = getUsableGpsPath(path);
   const hasGps = validPath.length > 0;
+  const {
+    data: mapAvailability,
+    isError: mapAvailabilityFailed,
+    isPending: isCheckingAvailability,
+  } = useQuery<MapAvailability>({
+    queryKey: ["/api/map-available"],
+    enabled: hasGps,
+  });
+  const isServerConfigured = mapAvailability?.available === true;
+  const canLoadMap = hasGps && isServerConfigured && Boolean(apiKey);
 
   useEffect(() => {
-    if (!apiKey || !hasGps) return;
+    setIsReady(false);
+    setLoadError(null);
+    if (!canLoadMap || !apiKey) return;
+
+    let cancelled = false;
+    const unsubscribeFromAuthFailure = subscribeToGoogleMapsAuthFailure((message) => {
+      if (!cancelled) {
+        setIsReady(false);
+        setLoadError(message);
+      }
+    });
+
     loadGoogleMapsApi(apiKey)
-      .then(() => setIsReady(true))
-      .catch(() => setLoadError(true));
-  }, [apiKey, hasGps]);
+      .then(() => {
+        if (!cancelled) setIsReady(true);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setLoadError(error instanceof Error ? error.message : "Google Maps could not be loaded");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      unsubscribeFromAuthFailure();
+    };
+  }, [apiKey, canLoadMap]);
 
   useEffect(() => {
-    if (!isReady || !mapDivRef.current || validPath.length === 0) return;
+    if (!isReady || loadError || !mapDivRef.current || validPath.length === 0) return;
 
-    const initialPos =
-      (path[currentIndex]?.lat !== 0 || path[currentIndex]?.lng !== 0
-        ? path[currentIndex]
-        : null) ?? validPath[0];
+    const initialPos = getGpsPositionAt(path, currentIndex) ?? validPath[0];
 
     const map = new window.google.maps.Map(mapDivRef.current, {
       center: initialPos,
@@ -109,14 +217,8 @@ export function MapView({ path, currentIndex }: MapViewProps) {
       map,
     });
 
-    const currentPos = path[currentIndex];
-    const markerPos =
-      currentPos && (currentPos.lat !== 0 || currentPos.lng !== 0)
-        ? currentPos
-        : validPath[0];
-
     const marker = new window.google.maps.Marker({
-      position: markerPos,
+      position: initialPos,
       map,
       icon: {
         url: TESLA_MARKER_URL,
@@ -130,40 +232,109 @@ export function MapView({ path, currentIndex }: MapViewProps) {
     validPath.forEach((p) => bounds.extend(p));
     map.fitBounds(bounds, { top: 24, right: 24, bottom: 24, left: 24 });
 
-    mapRef.current = map;
     markerRef.current = marker;
-  }, [isReady, path]);
+
+    return () => {
+      marker.setMap(null);
+      markerRef.current = null;
+    };
+  }, [isReady, loadError, path]);
 
   useEffect(() => {
     if (!markerRef.current || path.length === 0) return;
-    const pos = path[currentIndex];
-    if (pos && (pos.lat !== 0 || pos.lng !== 0)) {
+    const pos = getGpsPositionAt(path, currentIndex);
+    if (pos) {
       markerRef.current.setPosition(pos);
     }
   }, [currentIndex, path]);
 
-  if (!apiKey || !hasGps) return null;
+  const panelState = getMapPanelState({
+    hasGps,
+    isCheckingAvailability,
+    mapAvailabilityFailed,
+    isServerConfigured,
+    hasClientKey: Boolean(apiKey),
+    loadError: Boolean(loadError),
+    isReady,
+  });
 
-  if (loadError) {
+  if (panelState === "no-gps") {
     return (
-      <div
-        className="w-full h-full border-t border-[#393C41] bg-[#181818] flex items-center justify-center"
-        data-testid="map-error"
-      >
-        <span className="text-sm text-white/30">
-          Map unavailable — check your Google Maps API key
-        </span>
-      </div>
+      <MapStatus
+        testId="map-no-gps"
+        title="Route unavailable"
+        detail="This clip does not contain usable GPS navigation data."
+      />
+    );
+  }
+
+  if (panelState === "checking-availability") {
+    return (
+      <MapStatus
+        testId="map-checking-availability"
+        title="Checking map availability"
+        detail="Preparing the recorded route map."
+      />
+    );
+  }
+
+  if (panelState === "availability-error") {
+    return (
+      <MapStatus
+        testId="map-availability-error"
+        title="Map unavailable"
+        detail="The app could not confirm Google Maps availability. Try refreshing after signing in."
+      />
+    );
+  }
+
+  if (panelState === "not-configured") {
+    return (
+      <MapStatus
+        testId="map-not-configured"
+        title="Map unavailable"
+        detail="Google Maps is not configured for this viewer."
+      />
+    );
+  }
+
+  if (panelState === "client-key-missing") {
+    return (
+      <MapStatus
+        testId="map-client-key-missing"
+        title="Map unavailable"
+        detail="The browser Maps key is unavailable. Reload the viewer after the Maps configuration is updated."
+      />
+    );
+  }
+
+  if (panelState === "load-error") {
+    return (
+      <MapStatus
+        testId="map-error"
+        title="Map unavailable"
+        detail={`${loadError}. Check that the Google Maps JavaScript API is enabled for this key.`}
+      />
+    );
+  }
+
+  if (panelState === "loading") {
+    return (
+      <MapStatus
+        testId="map-loading"
+        title="Loading route map"
+        detail="Drawing the recorded route and current vehicle position."
+      />
     );
   }
 
   return (
     <div
-      className="w-full h-full border-t border-[#393C41]"
+      className="h-full w-full border-t border-[#393C41]"
     >
       <div
         ref={mapDivRef}
-        className="w-full h-full"
+        className="h-full w-full"
         data-testid="map-view"
       />
     </div>
