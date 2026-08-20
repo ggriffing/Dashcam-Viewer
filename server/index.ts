@@ -91,9 +91,11 @@ app.use((req, res, next) => {
 
   res.on("finish", () => {
     const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
+      if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
+        // Tesla decryption responses contain short-lived per-file keys. Never
+        // place those in application logs.
+        if (capturedJsonResponse && path !== "/api/tesla/decryption-keys") {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
 

@@ -10,6 +10,11 @@ import { LogOut, UserRound, X } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import type { CameraAngle, VideoFrame, VideoConfig, SeiMetadataRaw, FieldInfo } from "@/lib/dashcam/types";
 import { detectCameraFromFilename, isPlayableDashcamMp4 } from "@/lib/dashcam/teslaDriveTraversal";
+import {
+  decryptTeslaEncryptedClip,
+  inspectTeslaEncryptedClip,
+  requestTeslaDecryptionKeys,
+} from "@/lib/dashcam/teslaEncryptedClip";
 
 interface CameraData {
   angle: CameraAngle;
@@ -201,6 +206,35 @@ export default function DashcamViewer() {
       }
     }
   }, [seiType]);
+
+  const handleEncryptedFilesSelected = useCallback(async (
+    encryptedFiles: File[],
+    authorization: string,
+  ) => {
+    if (!authorization.trim()) {
+      throw new Error("Paste a current Tesla Dashcam Viewer authorization to decrypt clips.");
+    }
+
+    const metadata = await Promise.all(encryptedFiles.map(inspectTeslaEncryptedClip));
+    const results = await requestTeslaDecryptionKeys(authorization, metadata);
+    const missingKey = metadata.find((clip) => {
+      const result = results.get(clip.id);
+      return !result?.key;
+    });
+    if (missingKey) {
+      const result = results.get(missingKey.id);
+      throw new Error(
+        result?.error
+          ? `Tesla could not authorize ${missingKey.id}: ${result.error}`
+          : "Tesla did not return a decryption key for one or more selected clips.",
+      );
+    }
+
+    const decryptedFiles = await Promise.all(metadata.map((clip, index) =>
+      decryptTeslaEncryptedClip(encryptedFiles[index], clip, results.get(clip.id)!.key!),
+    ));
+    await handleFilesSelected(decryptedFiles);
+  }, [handleFilesSelected]);
 
   const getCurrentDuration = useCallback(() => {
     if (totalFrames === 0) return 0;
@@ -435,6 +469,7 @@ export default function DashcamViewer() {
         <div className={!hasVideos ? "flex-1 p-4 min-h-0 overflow-y-auto" : "hidden"}>
           <TeslaDriveBrowser
             onFilesSelected={handleFilesSelected}
+            onDecryptEncryptedFiles={handleEncryptedFilesSelected}
             isLoading={isLoading}
           />
         </div>

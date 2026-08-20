@@ -12,6 +12,8 @@ import {
   FolderOpen,
   Trash2,
   LockKeyhole,
+  ShieldCheck,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,6 +29,7 @@ import {
 
 interface TeslaDriveBrowserProps {
   onFilesSelected: (files: File[]) => void | Promise<void>;
+  onDecryptEncryptedFiles: (files: File[], authorization: string) => void | Promise<void>;
   isLoading: boolean;
 }
 
@@ -51,7 +54,11 @@ interface ExpandedEvent {
   eventName: string;
 }
 
-export function TeslaDriveBrowser({ onFilesSelected, isLoading }: TeslaDriveBrowserProps) {
+export function TeslaDriveBrowser({
+  onFilesSelected,
+  onDecryptEncryptedFiles,
+  isLoading,
+}: TeslaDriveBrowserProps) {
   const [driveData, setDriveData] = useState<TeslaDriveData | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
@@ -64,6 +71,11 @@ export function TeslaDriveBrowser({ onFilesSelected, isLoading }: TeslaDriveBrow
   const [pendingDelete, setPendingDelete] = useState<{ categoryKey: string; event: EventEntry } | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [pendingDecryption, setPendingDecryption] = useState<{ event: EventEntry; files: File[] } | null>(null);
+  const [teslaAuthorization, setTeslaAuthorization] = useState("");
+  const [hasTeslaAuthorization, setHasTeslaAuthorization] = useState(false);
+  const [decrypting, setDecrypting] = useState(false);
+  const [decryptionError, setDecryptionError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const supportsDirectoryPicker = typeof window !== "undefined" && "showDirectoryPicker" in window;
 
@@ -179,15 +191,26 @@ export function TeslaDriveBrowser({ onFilesSelected, isLoading }: TeslaDriveBrow
   }, []);
 
   const handleLoadEvent = useCallback(async (categoryKey: string, event: EventEntry) => {
+    const selected = event.cameras.filter(c => checkedCameras.has(c.cameraName));
+    if (selected.length === 0) return;
+
     if (categoryKey.toLowerCase() === "encryptedclips") {
-      setEventLoadError(
-        "These clips are encrypted by Tesla and cannot be played directly. Decrypt or download them with Tesla Dashcam Viewer, then drag the decrypted MP4 files into this page."
-      );
+      setLoadingEvent(true);
+      setEventLoadError(null);
+      try {
+        const files = await Promise.all(selected.map(c => c.fileHandle.getFile()));
+        setDecryptionError(null);
+        setTeslaAuthorization("");
+        setHasTeslaAuthorization(false);
+        setPendingDecryption({ event, files });
+      } catch (err) {
+        setEventLoadError(err instanceof Error ? err.message : "Failed to read encrypted camera files.");
+      } finally {
+        setLoadingEvent(false);
+      }
       return;
     }
 
-    const selected = event.cameras.filter(c => checkedCameras.has(c.cameraName));
-    if (selected.length === 0) return;
     setLoadingEvent(true);
     setEventLoadError(null);
     try {
@@ -200,6 +223,41 @@ export function TeslaDriveBrowser({ onFilesSelected, isLoading }: TeslaDriveBrow
       setLoadingEvent(false);
     }
   }, [checkedCameras, onFilesSelected]);
+
+  const closeDecryptionDialog = useCallback(() => {
+    if (decrypting) return;
+    setPendingDecryption(null);
+    setTeslaAuthorization("");
+    setHasTeslaAuthorization(false);
+    setDecryptionError(null);
+  }, [decrypting]);
+
+  const handleConfirmDecryption = useCallback(async () => {
+    if (!pendingDecryption || !hasTeslaAuthorization || !teslaAuthorization.trim()) return;
+
+    const authorization = teslaAuthorization;
+    setDecrypting(true);
+    setDecryptionError(null);
+    setEventLoadError(null);
+    // Remove the temporary authorization from visible UI state before any
+    // crypto work starts. The local call below holds it only long enough to
+    // make Tesla's one key request.
+    setTeslaAuthorization("");
+    try {
+      await onDecryptEncryptedFiles(pendingDecryption.files, authorization);
+      setPendingDecryption(null);
+      setHasTeslaAuthorization(false);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Could not decrypt the selected clips.";
+      setDecryptionError(message);
+      setEventLoadError(message);
+    } finally {
+      // The authorization is never persisted; discard it immediately after this
+      // one request, including when Tesla rejects it.
+      setTeslaAuthorization("");
+      setDecrypting(false);
+    }
+  }, [hasTeslaAuthorization, onDecryptEncryptedFiles, pendingDecryption, teslaAuthorization]);
 
   const handleRequestDelete = useCallback((categoryKey: string, event: EventEntry) => {
     setDeleteError(null);
@@ -364,6 +422,118 @@ export function TeslaDriveBrowser({ onFilesSelected, isLoading }: TeslaDriveBrow
                     <>
                       <Trash2 className="mr-2 h-4 w-4" />
                       Delete from drive
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+        {pendingDecryption && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="tesla-decryption-title"
+            onClick={closeDecryptionDialog}
+          >
+            <div
+              className="w-full max-w-lg rounded-lg border border-amber-400/30 bg-[#181818] p-6 shadow-lg"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-start gap-3">
+                <div className="rounded-full border border-amber-400/30 bg-amber-400/10 p-2">
+                  <ShieldCheck className="h-5 w-5 text-amber-300" />
+                </div>
+                <div>
+                  <h2 id="tesla-decryption-title" className="text-lg font-semibold text-white">
+                    Decrypt with Tesla authorization
+                  </h2>
+                  <p className="mt-1 text-sm text-white/60">
+                    {pendingDecryption.files.length} selected camera{pendingDecryption.files.length === 1 ? "" : "s"} will
+                    be decrypted only in this browser and opened directly in the viewer.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 rounded-lg border border-white/10 bg-black/20 p-4 text-sm text-white/70">
+                <p className="font-medium text-white">Your Tesla password is never entered here.</p>
+                <p className="mt-1">
+                  Open Tesla Dashcam Viewer, sign in there, and copy a current temporary Bearer authorization from
+                  its decryption request. This viewer uses it once to request keys from Tesla, then immediately
+                  discards it. Your video files and decrypted MP4s never upload to our server.
+                </p>
+                <a
+                  href="https://dashcam.tesla.com"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-3 inline-flex items-center gap-1 text-amber-300 hover:text-amber-200"
+                >
+                  Open Tesla Dashcam Viewer <ExternalLink className="h-3.5 w-3.5" />
+                </a>
+              </div>
+
+              <label className="mt-4 block text-sm font-medium text-white/80" htmlFor="tesla-authorization">
+                Temporary Dashcam Viewer authorization
+              </label>
+              <input
+                id="tesla-authorization"
+                type="password"
+                autoComplete="off"
+                spellCheck={false}
+                value={teslaAuthorization}
+                onChange={(event) => setTeslaAuthorization(event.target.value)}
+                placeholder="Bearer token from Tesla Dashcam Viewer"
+                className="mt-2 w-full rounded-md border border-[#393C41] bg-black/30 px-3 py-2 font-mono text-sm text-white outline-none placeholder:text-white/25 focus:border-amber-400/70"
+                disabled={decrypting}
+                data-testid="input-tesla-authorization"
+              />
+              <label className="mt-4 flex cursor-pointer items-start gap-2 text-sm text-white/70">
+                <input
+                  type="checkbox"
+                  checked={hasTeslaAuthorization}
+                  onChange={(event) => setHasTeslaAuthorization(event.target.checked)}
+                  disabled={decrypting}
+                  className="mt-0.5 accent-[#E82127]"
+                />
+                <span>I own these clips or have permission to decrypt them with this Tesla account.</span>
+              </label>
+              {decryptionError && (
+                <div className="mt-4 flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2">
+                  <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-400" />
+                  <p className="text-sm text-red-400">{decryptionError}</p>
+                </div>
+              )}
+              <p className="mt-4 text-xs text-white/40">
+                Retention: decrypted data exists only in this browser’s memory until you clear the viewer or reload
+                the page. Nothing is saved to the server.
+              </p>
+              <div className="mt-6 flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={decrypting}
+                  className="border-[#393C41] text-white/70 hover:text-white"
+                  onClick={closeDecryptionDialog}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  disabled={decrypting || !hasTeslaAuthorization || !teslaAuthorization.trim()}
+                  className="bg-[#E82127] text-white hover:bg-[#E82127]/80"
+                  onClick={handleConfirmDecryption}
+                  data-testid="button-confirm-tesla-decryption"
+                >
+                  {decrypting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Decrypting locally…
+                    </>
+                  ) : (
+                    <>
+                      <LockKeyhole className="mr-2 h-4 w-4" />
+                      Authorize & decrypt
                     </>
                   )}
                 </Button>
@@ -757,18 +927,20 @@ function EventRow({
 
       {isSelected && (
         <div className="px-6 pb-4 pt-2 flex flex-col gap-3">
-          {isEncrypted ? (
+          {isEncrypted && (
             <div className="rounded border border-amber-400/30 bg-amber-400/10 px-3 py-2.5 text-amber-100/85 text-xs flex items-start gap-2">
               <LockKeyhole className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-300" />
               <p>
-                Tesla encrypted these recordings. Decrypt or download them with Tesla Dashcam Viewer first, then drag the decrypted MP4 files into this page.
+                Tesla encrypted these recordings. Select the camera files to decrypt with a temporary Tesla Dashcam
+                Viewer authorization. Video bytes stay in this browser.
               </p>
             </div>
-          ) : (
-            <>
-              <p className="text-white/40 text-xs uppercase tracking-wider">Select cameras to load</p>
-              <div className="grid grid-cols-2 gap-2">
-                {event.cameras.map(cam => {
+          )}
+          <p className="text-white/40 text-xs uppercase tracking-wider">
+            {isEncrypted ? "Select cameras to decrypt" : "Select cameras to load"}
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {event.cameras.map(cam => {
               const isChecked = checkedCameras.has(cam.cameraName);
               const colors = SLOT_COLORS[cam.slot];
               const hasConflict = slotConflicts.has(cam.slot);
@@ -808,52 +980,55 @@ function EventRow({
                   </span>
                 </label>
               );
-                })}
-              </div>
+            })}
+          </div>
 
-              {slotConflicts.size > 0 && (
-                <p className="text-amber-400/70 text-xs flex items-center gap-1.5">
-                  <AlertCircle className="w-3 h-3 flex-shrink-0" />
-                  Multiple cameras selected for the same slot — only the last one loaded will appear.
-                </p>
-              )}
-
-              <div className="flex items-center gap-2 flex-wrap">
-                <Button
-                  size="sm"
-                  onClick={onLoad}
-                  disabled={checkedCount === 0 || loadingEvent}
-                  className="bg-[#E82127] hover:bg-[#E82127]/80 text-white"
-                  data-testid="button-load-cameras"
-                >
-                  {loadingEvent ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Loading…
-                    </>
-                  ) : (
-                    <>
-                      <Check className="w-4 h-4 mr-2" />
-                      Load {checkedCount} Camera{checkedCount !== 1 ? "s" : ""}
-                    </>
-                  )}
-                </Button>
-                {canDelete && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={onDelete}
-                    disabled={loadingEvent}
-                    className="border-red-500/40 text-red-400 hover:text-red-300 hover:border-red-400/60"
-                    data-testid="button-delete-saved-clip"
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Delete
-                  </Button>
-                )}
-              </div>
-            </>
+          {slotConflicts.size > 0 && (
+            <p className="text-amber-400/70 text-xs flex items-center gap-1.5">
+              <AlertCircle className="w-3 h-3 flex-shrink-0" />
+              Multiple cameras selected for the same slot — only the last one loaded will appear.
+            </p>
           )}
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              size="sm"
+              onClick={onLoad}
+              disabled={checkedCount === 0 || loadingEvent}
+              className="bg-[#E82127] hover:bg-[#E82127]/80 text-white"
+              data-testid={isEncrypted ? "button-decrypt-encrypted-cameras" : "button-load-cameras"}
+            >
+              {loadingEvent ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  {isEncrypted ? "Preparing…" : "Loading…"}
+                </>
+              ) : isEncrypted ? (
+                <>
+                  <LockKeyhole className="w-4 h-4 mr-2" />
+                  Authorize & decrypt {checkedCount} Camera{checkedCount !== 1 ? "s" : ""}
+                </>
+              ) : (
+                <>
+                  <Check className="w-4 h-4 mr-2" />
+                  Load {checkedCount} Camera{checkedCount !== 1 ? "s" : ""}
+                </>
+              )}
+            </Button>
+            {canDelete && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={onDelete}
+                disabled={loadingEvent}
+                className="border-red-500/40 text-red-400 hover:text-red-300 hover:border-red-400/60"
+                data-testid="button-delete-saved-clip"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete
+              </Button>
+            )}
+          </div>
           {loadError && (
             <p className="text-red-400 text-xs flex items-start gap-1.5" data-testid="text-load-error">
               <AlertCircle className="w-3 h-3 flex-shrink-0 mt-0.5" />

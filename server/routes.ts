@@ -1,10 +1,11 @@
-import type { Express, NextFunction, Request, Response } from "express";
+import type { Express, NextFunction, Request, RequestHandler, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { authCredentialsSchema, signUpSchema, type User } from "@shared/schema";
 import { verifyPassword } from "./password";
 import { createAuthRateLimiter } from "./authRateLimit";
 import { getAuth } from "@clerk/express";
+import { z } from "zod";
 
 declare module "express-session" {
   interface SessionData {
@@ -74,6 +75,55 @@ const signUpRateLimit = createAuthRateLimiter({
   maxAttempts: 5,
   windowMs: 15 * 60 * 1000,
 });
+
+const teslaDecryptionRequestSchema = z.object({
+  // This is a short-lived Dashcam Viewer bearer authorization, not a Tesla
+  // password. It is used for this request only and is never persisted.
+  authorization: z.string().trim().min(20).max(10_000),
+  items: z.array(z.object({
+    id: z.string().uuid(),
+    vin: z.string().length(17),
+    key_id: z.number().int().positive(),
+    timestamp: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    wrapped_key: z.string().min(1).max(256),
+    public_key: z.string().min(1).max(256),
+  })).min(1).max(20),
+});
+
+interface TeslaDecryptionWindow {
+  count: number;
+  resetAt: number;
+}
+
+const teslaDecryptionAttempts = new Map<string, TeslaDecryptionWindow>();
+const TESLA_DECRYPTION_WINDOW_MS = 15 * 60 * 1000;
+const TESLA_DECRYPTION_MAX_ATTEMPTS = 12;
+
+const teslaDecryptionRateLimit: RequestHandler = (req, res, next) => {
+  const now = Date.now();
+  const keys = [`tesla-decryption:ip:${req.ip || "unknown"}`];
+  const userId = req.clerkUserId ?? req.user?.id;
+  if (userId) keys.push(`tesla-decryption:user:${userId}`);
+
+  const windows = keys.map((key) => {
+    const existing = teslaDecryptionAttempts.get(key);
+    if (!existing || existing.resetAt <= now) {
+      const fresh = { count: 0, resetAt: now + TESLA_DECRYPTION_WINDOW_MS };
+      teslaDecryptionAttempts.set(key, fresh);
+      return fresh;
+    }
+    return existing;
+  });
+  const blocked = windows.find((window) => window.count >= TESLA_DECRYPTION_MAX_ATTEMPTS);
+  if (blocked) {
+    res.set("Retry-After", String(Math.max(1, Math.ceil((blocked.resetAt - now) / 1000))));
+    res.status(429).json({ message: "Too many Tesla decryption requests. Please wait a few minutes and try again." });
+    return;
+  }
+
+  for (const window of windows) window.count += 1;
+  next();
+};
 
 export async function registerRoutes(
   httpServer: Server,
@@ -146,6 +196,74 @@ export async function registerRoutes(
   app.get("/api/map-available", requireAuth, (_req, res) => {
     const hasKey = !!(process.env.VITE_GOOGLE_MAPS_API_KEY || process.env.VITE_GOOGLE_API_KEY);
     res.json({ available: hasKey });
+  });
+
+  /**
+   * Requests clip keys from Tesla without receiving or storing video bytes.
+   * This is intentionally a no-store, authenticated pass-through: the browser
+   * does all AES decryption and only clip ownership metadata reaches Tesla.
+   */
+  app.post("/api/tesla/decryption-keys", requireAuth, teslaDecryptionRateLimit, async (req, res, next) => {
+    const parsed = teslaDecryptionRequestSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ message: "Provide a valid current Tesla Dashcam Viewer authorization and clip metadata." });
+      return;
+    }
+
+    const authorization = parsed.data.authorization.replace(/^Bearer\s+/i, "");
+    try {
+      const upstream = await fetch("https://dashcam.tesla.com/api/1/decrypt/batch", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${authorization}`,
+          "Content-Type": "application/json",
+          Origin: "https://dashcam.tesla.com",
+          Referer: "https://dashcam.tesla.com/",
+        },
+        body: JSON.stringify({ items: parsed.data.items }),
+        signal: AbortSignal.timeout(15_000),
+      });
+
+      if (upstream.status === 401 || upstream.status === 403) {
+        res.status(401).json({ message: "Tesla did not accept that authorization. Get a fresh one from Tesla Dashcam Viewer and try again." });
+        return;
+      }
+      if (!upstream.ok) {
+        res.status(502).json({ message: "Tesla's decryption service could not provide clip keys. Try again shortly." });
+        return;
+      }
+
+      const upstreamPayload = await upstream.json() as { results?: unknown };
+      if (!Array.isArray(upstreamPayload.results)) {
+        res.status(502).json({ message: "Tesla returned an unexpected decryption response." });
+        return;
+      }
+
+      const results = upstreamPayload.results
+        .filter((item): item is { id: string; key?: string; error?: string } =>
+          typeof item === "object" &&
+          item !== null &&
+          typeof (item as { id?: unknown }).id === "string" &&
+          (typeof (item as { key?: unknown }).key === "string" ||
+            typeof (item as { error?: unknown }).error === "string"),
+        )
+        .map(({ id, key, error }) => ({ id, key, error }));
+
+      res.set({
+        "Cache-Control": "no-store, private",
+        Pragma: "no-cache",
+      });
+      res.json({ results });
+    } catch (error) {
+      // Do not include network request details here: they can contain the
+      // one-time authorization in diagnostic output.
+      console.error("[tesla-decryption] Tesla key request failed");
+      if (error instanceof DOMException && error.name === "TimeoutError") {
+        res.status(504).json({ message: "Tesla's decryption service took too long to respond. Please try again." });
+        return;
+      }
+      next(new Error("Could not reach Tesla's decryption service. Check your connection and try again."));
+    }
   });
 
   // Proxy that fetches a Google Maps Static API image server-side so the
