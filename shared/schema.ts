@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { json, pgTable, text, timestamp, varchar } from "drizzle-orm/pg-core";
 
 export const cameraAngleSchema = z.enum(["front", "left", "right", "rear"]);
 export type CameraAngle = z.infer<typeof cameraAngleSchema>;
@@ -72,19 +73,48 @@ export interface TelemetryData {
   frameNumber: number;
 }
 
-export const users = {
-  id: "",
-  username: "",
-  password: "",
-};
+export const users = pgTable("users", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  username: varchar("username", { length: 32 }).notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const sessions = pgTable("session", {
+  sid: varchar("sid", { length: 255 }).primaryKey(),
+  sess: json("sess").notNull(),
+  expire: timestamp("expire", { withTimezone: true }).notNull(),
+});
 
 export type InsertUser = {
   username: string;
   password: string;
 };
 
-export type User = {
-  id: string;
-  username: string;
-  password: string;
-};
+export type User = Pick<typeof users.$inferSelect, "id" | "username">;
+export type StoredUser = typeof users.$inferSelect;
+
+export const authCredentialsSchema = z.object({
+  username: z
+    .string({ required_error: "Username is required" })
+    .trim()
+    .min(1, "Username is required")
+    .max(32, "Username is too long"),
+  password: z
+    .string({ required_error: "Password is required" })
+    .min(1, "Password is required")
+    .max(128, "Password is too long"),
+});
+
+export const signUpSchema = authCredentialsSchema.extend({
+  username: z
+    .string({ required_error: "Username is required" })
+    .trim()
+    .min(3, "Username must be at least 3 characters")
+    .max(32, "Username must be 32 characters or fewer")
+    .regex(/^[a-zA-Z0-9_]+$/, "Username can only use letters, numbers, and underscores"),
+  password: z
+    .string({ required_error: "Password is required" })
+    .min(8, "Password must be at least 8 characters")
+    .max(128, "Password must be 128 characters or fewer"),
+});

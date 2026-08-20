@@ -1,9 +1,28 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
+export class ApiError extends Error {
+  constructor(public status: number, message: string) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+function notifyUnauthorized() {
+  window.dispatchEvent(new Event("auth:unauthorized"));
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
-    const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    const text = await res.text();
+    let message = res.statusText || "Request failed";
+    try {
+      const parsed = JSON.parse(text);
+      if (typeof parsed.message === "string") message = parsed.message;
+    } catch {
+      if (text) message = text;
+    }
+    if (res.status === 401) notifyUnauthorized();
+    throw new ApiError(res.status, message);
   }
 }
 
@@ -34,9 +53,11 @@ export const getQueryFn: <T>(options: {
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {
+      notifyUnauthorized();
       return null;
     }
 
+    if (res.status === 401) notifyUnauthorized();
     await throwIfResNotOk(res);
     return await res.json();
   };

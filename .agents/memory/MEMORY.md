@@ -1,0 +1,1 @@
+- [Authentication abuse limits](auth-abuse-limits.md) — successful auth must not clear the shared IP quota that protects sign-in and account creation.

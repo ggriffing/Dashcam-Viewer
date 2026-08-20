@@ -73,9 +73,18 @@ DATABASE_URL=postgresql://localhost:5432/dashcam
 SESSION_SECRET=your-secret-key-here
 ```
 
-If not using a database, the app will still work for video viewing features.
+Authentication requires both variables. The session secret should be a long,
+random value and must not be committed to source control.
 
-### 7. Set Up Run Configuration
+### 7. Set Up Database Tables
+
+After configuring `DATABASE_URL`, apply the users and PostgreSQL session schema:
+
+```bash
+npm run db:push
+```
+
+### 8. Set Up Run Configuration
 
 1. Go to **Run → Edit Configurations**
 2. Click the **+** button and select **npm**
@@ -87,7 +96,7 @@ If not using a database, the app will still work for video viewing features.
    - **Package manager:** npm
 4. Click **Apply** and **OK**
 
-### 8. Run the Application
+### 9. Run the Application
 
 1. Select **Dev Server** from the run configuration dropdown
 2. Click the green **Run** button (or press Ctrl+R)

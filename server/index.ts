@@ -2,15 +2,32 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
+import { clerkMiddleware } from "@clerk/express";
+import { publishableKeyFromHost } from "@clerk/shared/keys";
+import { pool } from "./db";
+import {
+  CLERK_PROXY_PATH,
+  clerkProxyMiddleware,
+  getClerkProxyHost,
+} from "./middlewares/clerkProxyMiddleware";
 
 const app = express();
 const httpServer = createServer(app);
+const PgSession = connectPgSimple(session);
+
+if (!process.env.SESSION_SECRET) {
+  throw new Error("SESSION_SECRET is required for authentication");
+}
 
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;
   }
 }
+
+app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 
 app.use(
   express.json({
@@ -21,6 +38,34 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+
+app.set("trust proxy", 1);
+app.use(
+  clerkMiddleware((req) => ({
+    publishableKey: publishableKeyFromHost(
+      getClerkProxyHost(req) ?? "",
+      process.env.CLERK_PUBLISHABLE_KEY,
+    ),
+  })),
+);
+app.use(
+  session({
+    store: new PgSession({
+      pool,
+      createTableIfMissing: true,
+    }),
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    rolling: true,
+    cookie: {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+    },
+  }),
+);
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {

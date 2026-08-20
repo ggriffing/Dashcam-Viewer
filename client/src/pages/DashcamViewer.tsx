@@ -6,7 +6,8 @@ import { MapView, type LatLng } from "@/components/MapView";
 import { TeslaDriveBrowser } from "@/components/TeslaDriveBrowser";
 import { VideoExportDialog } from "@/components/VideoExportDialog";
 import { Button } from "@/components/ui/button";
-import { X } from "lucide-react";
+import { LogOut, UserRound, X } from "lucide-react";
+import { useAuth } from "@/lib/auth";
 import type { CameraAngle, VideoFrame, VideoConfig, SeiMetadataRaw, FieldInfo } from "@/lib/dashcam/types";
 import { detectCameraFromFilename, isPlayableDashcamMp4 } from "@/lib/dashcam/teslaDriveTraversal";
 
@@ -23,6 +24,7 @@ function detectCameraAngle(filename: string): CameraAngle | null {
 }
 
 export default function DashcamViewer() {
+  const { user, signOut } = useAuth();
   const [cameras, setCameras] = useState<CameraData[]>([
     { angle: 'front', file: null, frames: [], config: null, isActive: false },
     { angle: 'left', file: null, frames: [], config: null, isActive: false },
@@ -412,7 +414,20 @@ export default function DashcamViewer() {
   }, [handlePause]);
 
   return (
-    <div className="h-screen flex flex-col bg-[#181818] overflow-hidden">
+    <div className="relative h-screen flex flex-col bg-[#181818] overflow-hidden">
+      <div className="absolute right-3 top-3 z-50 flex items-center gap-2 rounded-full border border-white/10 bg-black/70 px-3 py-1.5 text-xs text-white/75 shadow-lg backdrop-blur">
+        <UserRound className="h-3.5 w-3.5 text-[#e82127]" />
+        <span className="max-w-28 truncate">{user?.username}</span>
+        <button
+          type="button"
+          onClick={() => void signOut()}
+          className="ml-1 rounded-full p-1 text-white/50 transition hover:bg-white/10 hover:text-white"
+          aria-label="Sign out"
+          title="Sign out"
+        >
+          <LogOut className="h-3.5 w-3.5" />
+        </button>
+      </div>
       <main className="flex-1 min-h-0 flex flex-col">
         {/* TeslaDriveBrowser is kept mounted (but hidden) while videos are playing
             so that driveData, expanded categories, and checked cameras survive
