@@ -1,5 +1,5 @@
 /// <reference types="google.maps" />
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   loadGoogleMapsApi,
@@ -17,11 +17,27 @@ export type { LatLng } from "@shared/mapNavigation";
 interface MapViewProps {
   path: LatLng[];
   currentIndex: number;
+  /**
+   * These optional overrides let browser-style tests exercise the route view
+   * without exposing a real browser key or requesting Google from Preview.
+   */
+  apiKey?: string;
+  mapsClient?: GoogleMapsClient;
 }
 
 interface MapAvailability {
   available: boolean;
 }
+
+export interface GoogleMapsClient {
+  load: (apiKey: string) => Promise<void>;
+  subscribeToAuthFailure: (listener: (message: string) => void) => () => void;
+}
+
+const browserMapsClient: GoogleMapsClient = {
+  load: loadGoogleMapsApi,
+  subscribeToAuthFailure: subscribeToGoogleMapsAuthFailure,
+};
 
 const TESLA_MARKER_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 36" width="28" height="36">
   <path d="M14 0C6.268 0 0 6.268 0 14c0 9.333 14 22 14 22S28 23.333 28 14C28 6.268 21.732 0 14 0z" fill="#E82127"/>
@@ -44,16 +60,23 @@ function MapStatus({ title, detail, testId }: { title: string; detail: string; t
   );
 }
 
-export function MapView({ path, currentIndex }: MapViewProps) {
+export function MapView({
+  path,
+  currentIndex,
+  apiKey: apiKeyOverride,
+  mapsClient = browserMapsClient,
+}: MapViewProps) {
   const mapDivRef = useRef<HTMLDivElement>(null);
   const markerRef = useRef<google.maps.Marker | null>(null);
   const [isReady, setIsReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const apiKey = (
-    (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined) ||
-    (import.meta.env.VITE_GOOGLE_API_KEY as string | undefined)
+  const viteEnvironment = (import.meta.env ?? {}) as Record<string, string | undefined>;
+  const configuredApiKey = (
+    viteEnvironment.VITE_GOOGLE_MAPS_API_KEY ||
+    viteEnvironment.VITE_GOOGLE_API_KEY
   );
+  const apiKey = apiKeyOverride ?? configuredApiKey;
 
   const validPath = getUsableGpsPath(path);
   const hasGps = validPath.length > 0;
@@ -74,14 +97,14 @@ export function MapView({ path, currentIndex }: MapViewProps) {
     if (!canLoadMap || !apiKey) return;
 
     let cancelled = false;
-    const unsubscribeFromAuthFailure = subscribeToGoogleMapsAuthFailure((message) => {
+    const unsubscribeFromAuthFailure = mapsClient.subscribeToAuthFailure((message) => {
       if (!cancelled) {
         setIsReady(false);
         setLoadError(message);
       }
     });
 
-    loadGoogleMapsApi(apiKey)
+    mapsClient.load(apiKey)
       .then(() => {
         if (!cancelled) setIsReady(true);
       })
@@ -95,7 +118,7 @@ export function MapView({ path, currentIndex }: MapViewProps) {
       cancelled = true;
       unsubscribeFromAuthFailure();
     };
-  }, [apiKey, canLoadMap]);
+  }, [apiKey, canLoadMap, mapsClient]);
 
   useEffect(() => {
     if (!isReady || loadError || !mapDivRef.current || validPath.length === 0) return;
