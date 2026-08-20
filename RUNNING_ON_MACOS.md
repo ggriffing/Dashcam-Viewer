@@ -136,3 +136,41 @@ If you see database errors but don't need database features, the video viewer wi
 - Ensure you're using a supported browser (Chrome/Edge/Firefox)
 - Check that the MP4 files are valid Tesla dashcam recordings
 - Look for error messages in the browser console (View → Developer → JavaScript Console)
+
+---
+
+## Playback Stability & Regression Testing
+
+After changes to the playback loop or decoder lifecycle, manually verify the following scenarios with real Tesla clips (especially longer ones with variable frame rates and multiple cameras):
+
+### Core Playback
+- Load a 4-camera event and play through the entire clip end-to-end.
+- Use Space to play/pause repeatedly. Playback should resume smoothly from the current frame.
+- Use the timeline slider, arrow keys, Home, and End while playing and while paused.
+
+### Seeking
+- Seek forward and backward within the same GOP (should feel fast after Phase 1 decoder reuse).
+- Seek backward across multiple GOP boundaries (may trigger decoder recreation — should still be reliable).
+- Rapidly click the step-back / step-forward buttons.
+
+### Load / Clear Races (most important for stability)
+- Start playback, then immediately load a different event.
+- Start playback, then click Clear while the clip is playing.
+- Trigger multiple rapid loads in succession (the generation counter + timer guards should keep things clean).
+
+### Mixed Operations
+- Play a clip, then open the Export dialog (playback should pause cleanly).
+- Export while a previous playback session was active (no interference expected).
+- Load a new event while an export is in progress.
+
+### Long-Running / Edge Cases
+- Play a long clip (5+ minutes) and watch for timer drift, stuttering, or increasing memory usage.
+- Leave the viewer idle on the last frame for 30+ seconds, then resume playback.
+
+### Expected Behavior After Stabilization (Phases 1–3)
+- No console warnings about closed decoders or overlapping timers during normal use.
+- Seeking and loading feel responsive; no “ghost” frames or stuck telemetry.
+- All four cameras stay in sync even during rapid seeking and load/clear cycles.
+- Clearing or loading a new event while playing never leaves timers or decoders running in the background.
+
+If you observe jitter, dropped frames on forward playback, or errors after loading a new clip, capture the browser console and the approximate frame number / GOP location.

@@ -33,6 +33,9 @@ const SCROLL_SCALE = 40;
 const LATERAL_SCALE = 0.05;
 const LATERAL_MAX = 0.22;
 
+const STEERING_LATERAL_SCALE = 0.015;   // dominant input for turn visualization
+
+
 const ACCEL_THRESHOLD = 0.8;
 
 function hasData(m: SeiMetadataRaw): boolean {
@@ -193,21 +196,33 @@ export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayPr
           const arrowH = slotH * ARROW_FILL_RATIO;
           const period = slotH;
           const offset = ((scrollRef.current % period) + period) % period;
-          const pointUp = driveState === "accel";
+          const pointUp = driveState === "brake";
 
           // Semi-transparent blue base — road shows through in gaps between arrows
           ctx.fillStyle = BLUE;
           ctx.globalAlpha = 0.35;
           ctx.fillRect(0, 0, CVS_W, CVS_H);
 
-          // Solid opaque bright-blue chevrons on top
+          // Solid bright-blue chevrons with smooth fade at top/bottom edges
+          // (prevents popping/flickering when chevrons scroll into view)
           ctx.fillStyle = BLUE;
-          ctx.globalAlpha = 1.0;
           for (let i = -2; i < N_ARROWS + 3; i++) {
             const slotTop = g.topY + i * period - offset;
             const arrowTop = slotTop + (slotH - arrowH) / 2;
+            const arrowCenterY = arrowTop + arrowH / 2;
+
+            // Fade arrows near the top and bottom of the trapezoid
+            const distFromEdge = Math.min(
+              arrowCenterY - g.topY,
+              g.botY - arrowCenterY
+            );
+            const fadeZone = slotH * 0.8; // tune this for how quickly they fade
+            const edgeAlpha = Math.max(0.15, Math.min(1, distFromEdge / fadeZone));
+
+            ctx.globalAlpha = edgeAlpha;
             drawChevron(ctx, g, arrowTop, arrowH, lateral, pointUp);
           }
+          ctx.globalAlpha = 1.0;
         }
 
         ctx.restore();
@@ -256,8 +271,17 @@ export function FrontCameraOverlay({ metadata, isPlaying }: FrontCameraOverlayPr
   stateRef.current = state;
   geomRef.current = computeTrapGeom(speed, ax);
   speedMphRef.current = Math.round(speed * 2.23694);
-  targetVelRef.current = (visible && isPlaying && state !== "coast") ? ax * SCROLL_SCALE : 0;
-  lateralRef.current = Math.max(-LATERAL_MAX, Math.min(LATERAL_MAX, ay * LATERAL_SCALE));
+  targetVelRef.current = (visible && isPlaying && state !== "coast") ? -ax * SCROLL_SCALE : 0;
+  // Steering is the dominant input for the blue turn visualization (matches Tesla behavior).
+  // Lateral acceleration provides a secondary "feel" component.
+  const steeringLateral = -(metadata?.steeringWheelAngle ?? 0) * STEERING_LATERAL_SCALE;
+  const accelLateral = ay * LATERAL_SCALE;
+
+  lateralRef.current = Math.max(
+    -LATERAL_MAX,
+    Math.min(LATERAL_MAX, steeringLateral * 0.8 + accelLateral * 0.2)
+  );
+
 
   const autopilotState = metadata?.autopilotState ?? 0;
   const autopilotLabel = AUTOPILOT_LABELS[autopilotState];

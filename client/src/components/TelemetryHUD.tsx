@@ -9,6 +9,7 @@ import {
   ArrowRightCircle
 } from "lucide-react";
 import type { SeiMetadataRaw } from "@/lib/dashcam/types";
+import { getDisplayedAccelFraction } from "@/lib/dashcam/telemetry";
 
 interface TelemetryHUDProps {
   metadata: SeiMetadataRaw | null;
@@ -59,9 +60,9 @@ function formatTime(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
-function formatAccelerator(pos: number | undefined): string {
-  if (pos === undefined || pos === null) return "--";
-  return `${Math.round(pos * 100)}%`;
+function formatAccelerator(metadata: SeiMetadataRaw | null | undefined): string {
+  const frac = getDisplayedAccelFraction(metadata);
+  return `${Math.round(frac * 100)}%`;
 }
 
 export function TelemetryHUD({
@@ -159,7 +160,7 @@ export function TelemetryHUD({
           <div className="flex items-center gap-2">
             <span className="text-xs text-[#00FF00]/70">ACCEL</span>
             <span className="font-mono text-sm text-[#00FF00]" data-testid="text-accelerator">
-              {formatAccelerator(metadata?.acceleratorPedalPosition)}
+              {formatAccelerator(metadata)}
             </span>
           </div>
         </div>

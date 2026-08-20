@@ -10,12 +10,16 @@ export interface CameraEntry {
 export interface EventEntry {
   name: string;
   cameras: CameraEntry[];
+  /** Event subfolder, when clips live in TeslaCam/SavedClips/<timestamp>/. */
+  directoryHandle?: FileSystemDirectoryHandle;
 }
 
 export interface CategoryData {
   key: string;
   label: string;
   events: EventEntry[];
+  /** Category folder (e.g. SavedClips). Required to delete an event from disk. */
+  directoryHandle?: FileSystemDirectoryHandle;
 }
 
 export interface TeslaDriveData {
@@ -30,6 +34,9 @@ export interface TeslaDriveData {
 // ---------------------------------------------------------------------------
 interface FSDirectoryIterable {
   entries(): AsyncIterableIterator<[string, FileSystemHandle & { kind: "file" | "directory" }]>;
+  removeEntry?(name: string, options?: { recursive?: boolean }): Promise<void>;
+  queryPermission?(descriptor?: { mode?: "read" | "readwrite" }): Promise<PermissionState>;
+  requestPermission?(descriptor?: { mode?: "read" | "readwrite" }): Promise<PermissionState>;
 }
 
 function iterDir(handle: FileSystemDirectoryHandle): FSDirectoryIterable {
@@ -69,6 +76,16 @@ const SLOT_MAP: Record<string, CameraSlot> = {
 };
 
 const KNOWN_CAMERA_NAMES = Object.keys(SLOT_MAP);
+
+/**
+ * True for a real Tesla dashcam MP4. Skips macOS AppleDouble sidecar files
+ * (`._clip.mp4`) which sort before the real clip and are not playable.
+ */
+export function isPlayableDashcamMp4(filename: string): boolean {
+  const base = filename.split(/[/\\]/).pop() ?? filename;
+  if (base.startsWith("._") || base.startsWith(".")) return false;
+  return base.toLowerCase().endsWith(".mp4");
+}
 
 export function detectCameraFromFilename(
   filename: string
@@ -120,7 +137,7 @@ async function scanEventDir(
 
   for await (const [name, handle] of iterDir(eventHandle).entries()) {
     if (handle.kind !== "file") continue;
-    if (!name.toLowerCase().endsWith(".mp4")) continue;
+    if (!isPlayableDashcamMp4(name)) continue;
     allFiles.push({ name, handle: handle as FileSystemFileHandle });
   }
 
@@ -160,8 +177,14 @@ async function scanCategoryDir(
   for await (const [name, handle] of iterDir(categoryHandle).entries()) {
     if (handle.kind === "directory") {
       const cameras = await scanEventDir(handle as FileSystemDirectoryHandle);
-      if (cameras.length > 0) events.push({ name, cameras });
-    } else if (handle.kind === "file" && name.toLowerCase().endsWith(".mp4")) {
+      if (cameras.length > 0) {
+        events.push({
+          name,
+          cameras,
+          directoryHandle: handle as FileSystemDirectoryHandle,
+        });
+      }
+    } else if (handle.kind === "file" && isPlayableDashcamMp4(name)) {
       // Tesla sometimes stores clips flat (no event subfolder) — collect for grouping
       flatFiles.push({ name, handle: handle as FileSystemFileHandle });
     }
@@ -207,7 +230,7 @@ async function scanCategoryDir(
   }
 
   events.sort((a, b) => b.name.localeCompare(a.name));
-  return { key: categoryHandle.name, label, events };
+  return { key: categoryHandle.name, label, events, directoryHandle: categoryHandle };
 }
 
 // ---------------------------------------------------------------------------
@@ -339,6 +362,76 @@ export async function scanTeslaDrive(
   );
 }
 
+export function isSavedClipsCategory(category: CategoryData): boolean {
+  return category.key.toLowerCase() === "savedclips";
+}
+
+export function canDeleteSavedClip(category: CategoryData): boolean {
+  return isSavedClipsCategory(category) && category.directoryHandle != null;
+}
+
+async function ensureWritePermission(
+  handle: FileSystemDirectoryHandle
+): Promise<PermissionState> {
+  const dir = handle as unknown as FSDirectoryIterable;
+  if (dir.queryPermission) {
+    const current = await dir.queryPermission({ mode: "readwrite" });
+    if (current === "granted") return current;
+  }
+  if (dir.requestPermission) {
+    return dir.requestPermission({ mode: "readwrite" });
+  }
+  return "denied";
+}
+
+/**
+ * Permanently delete a Saved Clip from the Tesla USB drive.
+ * Removes the event folder (or timestamp-prefixed files if the category is flat).
+ */
+export async function deleteSavedClip(
+  category: CategoryData,
+  event: EventEntry
+): Promise<void> {
+  if (!isSavedClipsCategory(category)) {
+    throw new Error("Only Saved Clips can be deleted from the drive.");
+  }
+
+  const catHandle = category.directoryHandle;
+  if (!catHandle) {
+    throw new Error(
+      "This clip was opened without write access. Select the Tesla drive with Chrome or Edge to delete Saved Clips."
+    );
+  }
+
+  const permission = await ensureWritePermission(catHandle);
+  if (permission !== "granted") {
+    throw new Error("Write permission is required to delete Saved Clips from the drive.");
+  }
+
+  const dir = catHandle as unknown as FSDirectoryIterable;
+  if (!dir.removeEntry) {
+    throw new Error("This browser cannot delete files from the selected folder.");
+  }
+
+  if (event.directoryHandle) {
+    await dir.removeEntry(event.name, { recursive: true });
+    return;
+  }
+
+  const toRemove: string[] = [];
+  for await (const [name, handle] of iterDir(catHandle).entries()) {
+    if (handle.kind === "file" && name.startsWith(event.name)) {
+      toRemove.push(name);
+    }
+  }
+  if (toRemove.length === 0) {
+    throw new Error("Could not find files for this Saved Clip on the drive.");
+  }
+  for (const name of toRemove) {
+    await dir.removeEntry(name);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // webkitdirectory fallback — parse flat File[] by path
 // ---------------------------------------------------------------------------
@@ -375,7 +468,7 @@ const FILENAME_TIMESTAMP_RE = /^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})/;
 
 export function parseFolderFiles(files: File[]): TeslaDriveData {
   const mp4Files = files.filter((f) =>
-    f.name.toLowerCase().endsWith(".mp4")
+    isPlayableDashcamMp4(f.name)
   );
 
   if (mp4Files.length === 0) {
@@ -449,7 +542,7 @@ export function parseFolderFiles(files: File[]): TeslaDriveData {
     // If the segment immediately after the category is an MP4 filename, the
     // clips live flat inside the category folder (no event subfolder).
     // Extract the timestamp prefix from the filename to group cameras properly.
-    if (eventSegment.toLowerCase().endsWith(".mp4")) {
+    if (isPlayableDashcamMp4(eventSegment)) {
       const tsMatch = FILENAME_TIMESTAMP_RE.exec(eventSegment);
       if (tsMatch) {
         rawEntries.push({ category: parts[catIdx], event: tsMatch[1], file });

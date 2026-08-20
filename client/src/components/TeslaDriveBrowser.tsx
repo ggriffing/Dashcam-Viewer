@@ -10,18 +10,22 @@ import {
   RefreshCw,
   Video,
   FolderOpen,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   scanTeslaDrive,
   parseFolderFiles,
+  deleteSavedClip,
+  canDeleteSavedClip,
+  isPlayableDashcamMp4,
   type TeslaDriveData,
   type CategoryData,
   type EventEntry,
 } from "@/lib/dashcam/teslaDriveTraversal";
 
 interface TeslaDriveBrowserProps {
-  onFilesSelected: (files: File[]) => void;
+  onFilesSelected: (files: File[]) => void | Promise<void>;
   isLoading: boolean;
 }
 
@@ -55,6 +59,10 @@ export function TeslaDriveBrowser({ onFilesSelected, isLoading }: TeslaDriveBrow
   const [checkedCameras, setCheckedCameras] = useState<Set<string>>(new Set());
   const [isDragOver, setIsDragOver] = useState(false);
   const [loadingEvent, setLoadingEvent] = useState(false);
+  const [eventLoadError, setEventLoadError] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ categoryKey: string; event: EventEntry } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const supportsDirectoryPicker = typeof window !== "undefined" && "showDirectoryPicker" in window;
 
@@ -173,19 +181,66 @@ export function TeslaDriveBrowser({ onFilesSelected, isLoading }: TeslaDriveBrow
     const selected = event.cameras.filter(c => checkedCameras.has(c.cameraName));
     if (selected.length === 0) return;
     setLoadingEvent(true);
+    setEventLoadError(null);
     try {
       const files = await Promise.all(selected.map(c => c.fileHandle.getFile()));
-      onFilesSelected(files);
+      await onFilesSelected(files);
     } catch (err) {
       console.error("Failed to read camera files:", err);
+      setEventLoadError(err instanceof Error ? err.message : "Failed to load cameras.");
     } finally {
       setLoadingEvent(false);
     }
   }, [checkedCameras, onFilesSelected]);
 
+  const handleRequestDelete = useCallback((categoryKey: string, event: EventEntry) => {
+    setDeleteError(null);
+    setPendingDelete({ categoryKey, event });
+  }, []);
+
+  const handleConfirmDelete = useCallback(async () => {
+    if (!pendingDelete || !driveData) return;
+    const category = driveData.categories.find(c => c.key === pendingDelete.categoryKey);
+    if (!category) return;
+
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteSavedClip(category, pendingDelete.event);
+      setDriveData(prev => {
+        if (!prev) return prev;
+        const categories = prev.categories
+          .map(c => {
+            if (c.key !== pendingDelete.categoryKey) return c;
+            return { ...c, events: c.events.filter(e => e.name !== pendingDelete.event.name) };
+          })
+          .filter(c => c.events.length > 0);
+        return { ...prev, categories };
+      });
+      setExpandedEvent(prev => {
+        if (
+          prev?.categoryKey === pendingDelete.categoryKey &&
+          prev.eventName === pendingDelete.event.name
+        ) {
+          return null;
+        }
+        return prev;
+      });
+      setPendingDelete(null);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to delete Saved Clip.";
+      setDeleteError(msg);
+    } finally {
+      setDeleting(false);
+    }
+  }, [pendingDelete, driveData]);
+
   const addFiles = useCallback((files: File[]) => {
-    const mp4s = files.filter(f => f.name.toLowerCase().endsWith(".mp4"));
-    if (mp4s.length > 0) onFilesSelected(mp4s);
+    const mp4s = files.filter(f => isPlayableDashcamMp4(f.name));
+    if (mp4s.length === 0) return;
+    void Promise.resolve(onFilesSelected(mp4s)).catch((err) => {
+      setScanError(err instanceof Error ? err.message : "Failed to load files.");
+    });
   }, [onFilesSelected]);
 
   const handleDrop = useCallback(async (e: React.DragEvent) => {
@@ -209,42 +264,113 @@ export function TeslaDriveBrowser({ onFilesSelected, isLoading }: TeslaDriveBrow
     e.target.value = "";
   }, [addFiles]);
 
-  if (isLoading) {
+  const loadingOverlay = isLoading ? (
+    <div className="absolute inset-0 z-20 flex items-center justify-center bg-[#181818]/80">
+      <div className="flex flex-col items-center gap-4">
+        <div className="w-12 h-12 border-4 border-[#E82127] border-t-transparent rounded-full animate-spin" />
+        <p className="text-white/70 text-lg">Loading videos...</p>
+      </div>
+    </div>
+  ) : null;
+
+  if (driveData) {
     return (
-      <div className="w-full h-full min-h-[400px] flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-[#E82127] border-t-transparent rounded-full animate-spin" />
-          <p className="text-white/70 text-lg">Loading videos...</p>
-        </div>
+      <div className="relative w-full h-full min-h-[400px]">
+        {loadingOverlay}
+        <DriveView
+          driveData={driveData}
+          expandedCategories={expandedCategories}
+          expandedEvent={expandedEvent}
+          checkedCameras={checkedCameras}
+          loadingEvent={loadingEvent}
+          isDragOver={isDragOver}
+          onToggleCategory={toggleCategory}
+          onSelectEvent={selectEvent}
+          onToggleCamera={toggleCamera}
+          onLoadEvent={handleLoadEvent}
+          onRequestDelete={handleRequestDelete}
+          eventLoadError={eventLoadError}
+          onChangeDrive={handleSelectDrive}
+          onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(true); }}
+          onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsDragOver(false); }}
+          onDrop={handleDrop}
+          onFileInput={handleFileInput}
+          fileInputRef={fileInputRef}
+        />
+        {pendingDelete && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-clip-title"
+            onClick={() => {
+              if (!deleting) {
+                setPendingDelete(null);
+                setDeleteError(null);
+              }
+            }}
+          >
+            <div
+              className="w-full max-w-md rounded-lg border border-[#393C41] bg-[#181818] p-6 shadow-lg"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 id="delete-clip-title" className="text-lg font-semibold text-white">
+                Delete Saved Clip?
+              </h2>
+              <p className="mt-2 text-sm text-white/60">
+                This will permanently remove {formatEventName(pendingDelete.event.name)} from the USB
+                drive, including all camera files. This cannot be undone.
+              </p>
+              {deleteError && (
+                <div className="mt-4 flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2">
+                  <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-400" />
+                  <p className="text-sm text-red-400">{deleteError}</p>
+                </div>
+              )}
+              <div className="mt-6 flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={deleting}
+                  className="border-[#393C41] text-white/70 hover:text-white"
+                  onClick={() => {
+                    setPendingDelete(null);
+                    setDeleteError(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={handleConfirmDelete}
+                  disabled={deleting}
+                  data-testid="button-confirm-delete-clip"
+                >
+                  {deleting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Deleting…
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Delete from drive
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
 
-  if (driveData) {
-    return (
-      <DriveView
-        driveData={driveData}
-        expandedCategories={expandedCategories}
-        expandedEvent={expandedEvent}
-        checkedCameras={checkedCameras}
-        loadingEvent={loadingEvent}
-        isDragOver={isDragOver}
-        onToggleCategory={toggleCategory}
-        onSelectEvent={selectEvent}
-        onToggleCamera={toggleCamera}
-        onLoadEvent={handleLoadEvent}
-        onChangeDrive={handleSelectDrive}
-        onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(true); }}
-        onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsDragOver(false); }}
-        onDrop={handleDrop}
-        onFileInput={handleFileInput}
-        fileInputRef={fileInputRef}
-      />
-    );
-  }
-
   return (
-    <InitialView
+    <div className="relative w-full h-full min-h-[400px]">
+      {loadingOverlay}
+      <InitialView
       scanning={scanning}
       scanError={scanError}
       supportsDirectoryPicker={supportsDirectoryPicker}
@@ -256,6 +382,7 @@ export function TeslaDriveBrowser({ onFilesSelected, isLoading }: TeslaDriveBrow
       onFileInput={handleFileInput}
       fileInputRef={fileInputRef}
     />
+    </div>
   );
 }
 
@@ -361,6 +488,8 @@ interface DriveViewProps {
   onSelectEvent: (categoryKey: string, event: EventEntry) => void;
   onToggleCamera: (cameraName: string) => void;
   onLoadEvent: (event: EventEntry) => void;
+  onRequestDelete: (categoryKey: string, event: EventEntry) => void;
+  eventLoadError: string | null;
   onChangeDrive: () => void;
   onDragOver: (e: React.DragEvent) => void;
   onDragLeave: (e: React.DragEvent) => void;
@@ -380,6 +509,8 @@ function DriveView({
   onSelectEvent,
   onToggleCamera,
   onLoadEvent,
+  onRequestDelete,
+  eventLoadError,
   onChangeDrive,
   onDragOver,
   onDragLeave,
@@ -448,6 +579,11 @@ function DriveView({
               onSelectEvent={(event) => onSelectEvent(category.key, event)}
               onToggleCamera={onToggleCamera}
               onLoadEvent={onLoadEvent}
+              onRequestDelete={(event) => onRequestDelete(category.key, event)}
+              canDelete={canDeleteSavedClip(category)}
+              eventLoadError={
+                expandedEvent?.categoryKey === category.key ? eventLoadError : null
+              }
             />
           ))}
         </div>
@@ -477,6 +613,9 @@ interface CategorySectionProps {
   onSelectEvent: (event: EventEntry) => void;
   onToggleCamera: (cameraName: string) => void;
   onLoadEvent: (event: EventEntry) => void;
+  onRequestDelete: (event: EventEntry) => void;
+  canDelete: boolean;
+  eventLoadError: string | null;
 }
 
 function CategorySection({
@@ -490,6 +629,9 @@ function CategorySection({
   onSelectEvent,
   onToggleCamera,
   onLoadEvent,
+  onRequestDelete,
+  canDelete,
+  eventLoadError,
 }: CategorySectionProps) {
   return (
     <div className="border-b border-[#393C41]/50 last:border-b-0">
@@ -527,6 +669,9 @@ function CategorySection({
                 onSelect={() => onSelectEvent(event)}
                 onToggleCamera={onToggleCamera}
                 onLoad={() => onLoadEvent(event)}
+                onDelete={() => onRequestDelete(event)}
+                canDelete={canDelete}
+                loadError={isSelected ? eventLoadError : null}
               />
             );
           })}
@@ -545,6 +690,9 @@ interface EventRowProps {
   onSelect: () => void;
   onToggleCamera: (cameraName: string) => void;
   onLoad: () => void;
+  onDelete: () => void;
+  canDelete: boolean;
+  loadError: string | null;
 }
 
 function EventRow({
@@ -556,6 +704,9 @@ function EventRow({
   onSelect,
   onToggleCamera,
   onLoad,
+  onDelete,
+  canDelete,
+  loadError,
 }: EventRowProps) {
   const checkedCount = event.cameras.filter(c => checkedCameras.has(c.cameraName)).length;
 
@@ -639,25 +790,46 @@ function EventRow({
             </p>
           )}
 
-          <Button
-            size="sm"
-            onClick={onLoad}
-            disabled={checkedCount === 0 || loadingEvent}
-            className="bg-[#E82127] hover:bg-[#E82127]/80 text-white self-start"
-            data-testid="button-load-cameras"
-          >
-            {loadingEvent ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Loading…
-              </>
-            ) : (
-              <>
-                <Check className="w-4 h-4 mr-2" />
-                Load {checkedCount} Camera{checkedCount !== 1 ? "s" : ""}
-              </>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              size="sm"
+              onClick={onLoad}
+              disabled={checkedCount === 0 || loadingEvent}
+              className="bg-[#E82127] hover:bg-[#E82127]/80 text-white"
+              data-testid="button-load-cameras"
+            >
+              {loadingEvent ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Loading…
+                </>
+              ) : (
+                <>
+                  <Check className="w-4 h-4 mr-2" />
+                  Load {checkedCount} Camera{checkedCount !== 1 ? "s" : ""}
+                </>
+              )}
+            </Button>
+            {canDelete && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={onDelete}
+                disabled={loadingEvent}
+                className="border-red-500/40 text-red-400 hover:text-red-300 hover:border-red-400/60"
+                data-testid="button-delete-saved-clip"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete
+              </Button>
             )}
-          </Button>
+          </div>
+          {loadError && (
+            <p className="text-red-400 text-xs flex items-start gap-1.5" data-testid="text-load-error">
+              <AlertCircle className="w-3 h-3 flex-shrink-0 mt-0.5" />
+              {loadError}
+            </p>
+          )}
         </div>
       )}
     </div>

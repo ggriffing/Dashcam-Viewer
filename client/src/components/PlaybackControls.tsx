@@ -9,7 +9,9 @@ interface PlaybackControlsProps {
   duration: number;
   onPlay: () => void;
   onPause: () => void;
-  onSeek: (frame: number) => void;
+  onSeek: (frame: number, opts?: { pause?: boolean }) => void;
+  onScrubStart?: () => void;
+  onScrubEnd?: () => void;
   onExportVideo?: () => void;
   onClear?: () => void;
   disabled: boolean;
@@ -30,12 +32,23 @@ export function PlaybackControls({
   onPlay,
   onPause,
   onSeek,
+  onScrubStart,
+  onScrubEnd,
   onExportVideo,
   onClear,
   disabled,
 }: PlaybackControlsProps) {
   const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    onSeek(parseInt(e.target.value, 10));
+    onSeek(parseInt(e.target.value, 10), { pause: false });
+  };
+
+  const handleScrubPointerDown = (e: React.PointerEvent<HTMLInputElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    onScrubStart?.();
+  };
+
+  const handleScrubPointerUp = () => {
+    onScrubEnd?.();
   };
 
   const handleStepBack = () => {
@@ -112,6 +125,9 @@ export function PlaybackControls({
               max={Math.max(totalFrames - 1, 0)}
               value={currentFrame}
               onChange={handleSliderChange}
+              onPointerDown={handleScrubPointerDown}
+              onPointerUp={handleScrubPointerUp}
+              onLostPointerCapture={handleScrubPointerUp}
               disabled={disabled}
               className="video-slider absolute inset-x-0 w-full z-10"
               data-testid="slider-timeline"

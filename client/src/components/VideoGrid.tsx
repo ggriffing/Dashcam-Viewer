@@ -69,7 +69,13 @@ export const VideoGrid = forwardRef<VideoGridHandle, VideoGridProps>(
       playerRefs.current.forEach((player, angle) => {
         const camera = cameras.find(c => c.angle === angle);
         if (camera?.isActive && player) {
-          promises.push(player.renderFrame(frameIndex));
+          // Per-player try/catch so one camera's decode failure does not
+          // reject the whole batch and break the other camera angles.
+          promises.push(
+            player.renderFrame(frameIndex).catch((err) => {
+              console.warn(`[VideoGrid] renderFrame failed for ${angle}:`, err);
+            })
+          );
         }
       });
       await Promise.all(promises);
@@ -83,19 +89,20 @@ export const VideoGrid = forwardRef<VideoGridHandle, VideoGridProps>(
     }, []);
 
     const topRowAngles: CameraAngle[] = ["left", "front", "right"];
-    const rearCamera = cameras.find(c => c.angle === "rear");
-    const hasRear = rearCamera?.isActive;
+    const rearCamera = cameras.find(c => c.angle === "rear" && c.isActive);
 
     const activeTopRowCameras = topRowAngles
       .map(angle => cameras.find(c => c.angle === angle))
       .filter((camera): camera is CameraData => camera?.isActive ?? false);
+
+    const columns = Math.max(activeTopRowCameras.length, rearCamera ? 1 : 0, 1);
 
     return (
       <div
         className="w-full"
         style={{
           display: 'grid',
-          gridTemplateColumns: '1fr 1fr 1fr',
+          gridTemplateColumns: `repeat(${columns}, 1fr)`,
           gap: 0,
         }}
         data-testid="video-grid"
@@ -111,7 +118,7 @@ export const VideoGrid = forwardRef<VideoGridHandle, VideoGridProps>(
           />
         ))}
 
-        {hasRear && (
+        {rearCamera && columns === 3 && (
           <>
             <div />
             <CameraCell
@@ -122,6 +129,14 @@ export const VideoGrid = forwardRef<VideoGridHandle, VideoGridProps>(
             />
             <div />
           </>
+        )}
+        {rearCamera && columns !== 3 && (
+          <CameraCell
+            key="rear"
+            camera={rearCamera}
+            currentFrame={currentFrame}
+            playerRef={setPlayerRef("rear")}
+          />
         )}
       </div>
     );

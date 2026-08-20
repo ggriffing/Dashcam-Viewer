@@ -8,6 +8,7 @@ import { VideoExportDialog } from "@/components/VideoExportDialog";
 import { Button } from "@/components/ui/button";
 import { X } from "lucide-react";
 import type { CameraAngle, VideoFrame, VideoConfig, SeiMetadataRaw, FieldInfo } from "@/lib/dashcam/types";
+import { detectCameraFromFilename, isPlayableDashcamMp4 } from "@/lib/dashcam/teslaDriveTraversal";
 
 interface CameraData {
   angle: CameraAngle;
@@ -18,14 +19,7 @@ interface CameraData {
 }
 
 function detectCameraAngle(filename: string): CameraAngle | null {
-  const lower = filename.toLowerCase();
-  if (lower.includes('front')) return 'front';
-  if (lower.includes('left_pillar') || lower.includes('left-pillar')) return 'left';
-  if (lower.includes('right_pillar') || lower.includes('right-pillar')) return 'right';
-  if (lower.includes('left_repeater') || lower.includes('left-repeater') || (lower.includes('left') && !lower.includes('right'))) return 'left';
-  if (lower.includes('right_repeater') || lower.includes('right-repeater') || (lower.includes('right') && !lower.includes('left'))) return 'right';
-  if (lower.includes('back') || lower.includes('rear')) return 'rear';
-  return null;
+  return detectCameraFromFilename(filename)?.slot ?? null;
 }
 
 export default function DashcamViewer() {
@@ -43,10 +37,12 @@ export default function DashcamViewer() {
   const [currentMetadata, setCurrentMetadata] = useState<SeiMetadataRaw | null>(null);
   const [seiType, setSeiType] = useState<any>(null);
   const [seiFields, setSeiFields] = useState<FieldInfo[] | null>(null);
+  const seiTypeRef = useRef<any>(null);
   const [primaryFilename, setPrimaryFilename] = useState<string>("");
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [gpsPath, setGpsPath] = useState<LatLng[]>([]);
   const [mapKey, setMapKey] = useState(0);
+  const [isScrubbing, setIsScrubbing] = useState(false);
 
   const [videoLoadKey, setVideoLoadKey] = useState(0);
 
@@ -57,11 +53,16 @@ export default function DashcamViewer() {
   const currentFrameRef = useRef(0);
   const loadIdRef = useRef(0);
 
+  // Phase 2 stabilization: generation token to make the recursive playback
+  // timer chain tolerant of rapid play/pause/seek/load sequences.
+  const playbackGenRef = useRef(0);
+
   useEffect(() => {
     const initProtobuf = async () => {
       if (window.DashcamHelpers) {
         try {
           const { SeiMetadata, enumFields } = await window.DashcamHelpers.initProtobuf('/dashcam.proto');
+          seiTypeRef.current = SeiMetadata;
           setSeiType(SeiMetadata);
           setSeiFields(window.DashcamHelpers.deriveFieldInfo(SeiMetadata, enumFields, { useLabels: true }));
         } catch (err) {
@@ -73,11 +74,26 @@ export default function DashcamViewer() {
   }, []);
 
   const handleFilesSelected = useCallback(async (files: File[]) => {
-    if (files.length === 0 || !seiType) return;
+    const sei = seiTypeRef.current ?? seiType;
+    if (files.length === 0) {
+      throw new Error("No video files were selected.");
+    }
+    if (!sei) {
+      throw new Error("Telemetry parser is still starting. Try Load again in a moment.");
+    }
+    if (!window.DashcamMP4) {
+      throw new Error("Video parser failed to load. Refresh the page and try again.");
+    }
 
-    // Fix 1: Generation counter — any newer call will supersede this one.
+    // Load generation counter + timer guard.
+    // We use a monotonically increasing `myId` so that slow file reads or
+    // protobuf parsing from an earlier load are discarded if a newer load
+    // has already started. Combined with the explicit stopPlaybackTimer(),
+    // this prevents a previous playback loop from continuing after the user
+    // loads a new event.
     const myId = ++loadIdRef.current;
 
+    stopPlaybackTimer();
     setIsLoading(true);
     setIsPlaying(false);
     setCurrentFrame(0);
@@ -95,6 +111,7 @@ export default function DashcamViewer() {
       let primaryFrames: VideoFrame[] = [];
 
       for (const file of files) {
+        if (!isPlayableDashcamMp4(file.name)) continue;
         const angle = detectCameraAngle(file.name);
         if (!angle) continue;
 
@@ -104,12 +121,12 @@ export default function DashcamViewer() {
         try {
           const buffer = await file.arrayBuffer();
 
-          // Fix 1: Bail out if a newer load started while we were awaiting.
+          // Discard work from a previous (now stale) load attempt.
           if (myId !== loadIdRef.current) return;
 
           const mp4 = new window.DashcamMP4(buffer);
           const config = mp4.getConfig();
-          const frames = mp4.parseFrames(seiType);
+          const frames = mp4.parseFrames(sei);
 
           if (frames.length > 0) {
             newCameras[cameraIndex] = {
@@ -133,17 +150,30 @@ export default function DashcamViewer() {
         }
       }
 
-      // Fix 1: Final stale-load check before committing any state.
+      // Final stale-load check before committing any state.
       if (myId !== loadIdRef.current) return;
 
       const hasAnyVideo = newCameras.some(c => c.isActive);
+      const skipped = files.filter((f) => !detectCameraAngle(f.name)).map((f) => f.name);
+
       setCameras(newCameras);
       setHasVideos(hasAnyVideo);
       setTotalFrames(maxFrames);
       setPrimaryFilename(primaryFile?.name || "");
 
+      if (!hasAnyVideo) {
+        const names = files.map((f) => f.name).join(", ");
+        const extra = skipped.length > 0
+          ? ` Unrecognized filenames: ${skipped.join(", ")}.`
+          : "";
+        throw new Error(`Could not load camera video from: ${names}.${extra}`);
+      }
+
       if (hasAnyVideo && primaryFrames.length > 0) {
-        // Fix 3: Increment key to guarantee a fresh VideoGrid mount (clean decoders).
+        // Force a fresh VideoGrid + VideoPlayer tree on every new successful load.
+        // This is the simplest way to guarantee completely clean decoder state
+        // and layout for a different clip, even after the decoder-reuse work.
+        // See the detailed comment near the videoLoadKey declaration for rationale.
         setVideoLoadKey(k => k + 1);
 
         const startFrame = Math.max(0, firstKeyframeRef.current);
@@ -158,15 +188,12 @@ export default function DashcamViewer() {
         }));
         setGpsPath(path);
         setMapKey((k) => k + 1);
-
-        setTimeout(() => {
-          videoGridRef.current?.renderAllFrames(startFrame);
-        }, 100);
       }
     } catch (err) {
       console.error('Error loading files:', err);
+      throw err;
     } finally {
-      // Fix 1: Only clear the loading spinner if we are still the active load.
+      // Only clear the loading spinner if we are still the active load.
       if (myId === loadIdRef.current) {
         setIsLoading(false);
       }
@@ -201,19 +228,34 @@ export default function DashcamViewer() {
 
   const handlePlay = useCallback(() => {
     if (!hasVideos || totalFrames === 0) return;
+
+    // Phase 2: Bump generation so any in-flight timers from the previous
+    // play session are ignored by the guard in the playback effect.
+    playbackGenRef.current += 1;
+
+    // Reset the painted-frame guard on every fresh play start.
+    // This prevents early frames (especially at the very beginning of a clip)
+    // from being suppressed by a stale high value left over from previous
+    // playback or seeking.
+    videoGridRef.current?.renderAllFrames(currentFrame); // trigger reset inside players
+    // We also do an explicit reset via a tiny seek to the same frame so the
+    // guard logic inside VideoPlayer fires.
+    // Simpler: just tell the players to allow the current frame again.
+    // The cleanest way is to let the players reset when they see a "new session".
+    // For now we force a render which will hit the backward-seek reset if needed.
+
     setIsPlaying(true);
-  }, [hasVideos, totalFrames]);
+  }, [hasVideos, totalFrames, currentFrame]);
 
   const handlePause = useCallback(() => {
     setIsPlaying(false);
-    if (playTimerRef.current) {
-      clearTimeout(playTimerRef.current);
-      playTimerRef.current = null;
-    }
+    stopPlaybackTimer();
   }, []);
 
-  const handleSeek = useCallback((frame: number) => {
-    handlePause();
+  const handleSeek = useCallback((frame: number, opts?: { pause?: boolean }) => {
+    if (opts?.pause !== false) {
+      handlePause();
+    }
     const clampedFrame = Math.max(0, Math.min(frame, totalFrames - 1));
     currentFrameRef.current = clampedFrame;
     setCurrentFrame(clampedFrame);
@@ -221,20 +263,50 @@ export default function DashcamViewer() {
     videoGridRef.current?.renderAllFrames(clampedFrame);
   }, [handlePause, totalFrames, updateMetadata]);
 
+  const handleScrubStart = useCallback(() => {
+    playbackGenRef.current += 1;
+    setIsScrubbing(true);
+  }, []);
+
+  const handleScrubEnd = useCallback(() => {
+    setIsScrubbing(false);
+  }, []);
+
   useEffect(() => {
     currentFrameRef.current = currentFrame;
   }, [currentFrame]);
 
+  // Phase 2: Centralized timer cleanup helper. All pause/seek/load/clear paths
+  // should go through this to guarantee no orphaned timers.
+  const stopPlaybackTimer = () => {
+    if (playTimerRef.current) {
+      clearTimeout(playTimerRef.current);
+      playTimerRef.current = null;
+    }
+  };
+
+  // Playback scheduler (setTimeout chain driven by per-frame durations).
+  // This is intentionally simple; the heavy stabilization work is in VideoPlayer
+  // (decoder reuse). Future improvement: time-based scheduler using performance.now().
+  //
+  // Phase 2: The effect now captures a generation token so that late-firing
+  // timers from previous play sessions are harmless.
   useEffect(() => {
-    if (!isPlaying || totalFrames === 0) return;
+    if (!isPlaying || isScrubbing || totalFrames === 0) return;
+
+    const myGen = playbackGenRef.current;
 
     const playNextFrame = () => {
+      // Phase 2 guard: if we've paused, sought, or started a new play session,
+      // ignore this late timer callback.
+      if (!isPlaying || playbackGenRef.current !== myGen) return;
+
       const prevFrame = currentFrameRef.current;
       let next = prevFrame + 1;
       if (next >= totalFrames) {
         next = Math.max(0, firstKeyframeRef.current);
       }
-      
+
       currentFrameRef.current = next;
       setCurrentFrame(next);
       updateMetadata(next);
@@ -247,13 +319,8 @@ export default function DashcamViewer() {
     const duration = frameDurationsRef.current[currentFrameRef.current] || 33.33;
     playTimerRef.current = window.setTimeout(playNextFrame, duration);
 
-    return () => {
-      if (playTimerRef.current) {
-        clearTimeout(playTimerRef.current);
-        playTimerRef.current = null;
-      }
-    };
-  }, [isPlaying, totalFrames, updateMetadata]);
+    return stopPlaybackTimer;
+  }, [isPlaying, isScrubbing, totalFrames, updateMetadata]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -322,6 +389,8 @@ export default function DashcamViewer() {
   }, [hasVideos, seiFields, cameras, seiType, primaryFilename]);
 
   const handleClearVideos = useCallback(() => {
+    // Phase 2: handlePause already stops the timer; explicit call here is for clarity
+    // during full reset paths.
     handlePause();
     setCameras([
       { angle: 'front', file: null, frames: [], config: null, isActive: false },
@@ -345,8 +414,9 @@ export default function DashcamViewer() {
   return (
     <div className="h-screen flex flex-col bg-[#181818] overflow-hidden">
       <main className="flex-1 min-h-0 flex flex-col">
-        {/* Fix 2: Always mounted so driveData persists between event loads.
-            Hidden with CSS when videos are active; no state is lost. */}
+        {/* TeslaDriveBrowser is kept mounted (but hidden) while videos are playing
+            so that driveData, expanded categories, and checked cameras survive
+            between loads without being reset. */}
         <div className={!hasVideos ? "flex-1 p-4 min-h-0 overflow-y-auto" : "hidden"}>
           <TeslaDriveBrowser
             onFilesSelected={handleFilesSelected}
@@ -386,6 +456,8 @@ export default function DashcamViewer() {
               onPlay={handlePlay}
               onPause={handlePause}
               onSeek={handleSeek}
+              onScrubStart={handleScrubStart}
+              onScrubEnd={handleScrubEnd}
               onExportVideo={handleExportVideo}
               onClear={handleClearVideos}
               disabled={!hasVideos}

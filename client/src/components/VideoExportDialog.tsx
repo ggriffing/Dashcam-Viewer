@@ -16,6 +16,7 @@ import { Progress } from "@/components/ui/progress";
 import { Film, Download } from "lucide-react";
 import type { CameraAngle, VideoFrame as DashcamVideoFrame, VideoConfig, SeiMetadataRaw } from "@/lib/dashcam/types";
 import { fetchStaticMapImage, latLngToMapPixel, type StaticMapInfo } from "@/lib/dashcam/staticMapOverlay";
+import { getDisplayedAccelFraction } from "@/lib/dashcam/telemetry";
 
 const TESLA_MARKER_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 36" width="28" height="36">
   <path d="M14 0C6.268 0 0 6.268 0 14c0 9.333 14 22 14 22S28 23.333 28 14C28 6.268 21.732 0 14 0z" fill="#E82127"/>
@@ -75,9 +76,9 @@ function formatCoordinate(deg: number | undefined, isLat: boolean): string {
   const dir = isLat ? (deg >= 0 ? "N" : "S") : (deg >= 0 ? "E" : "W");
   return `${Math.abs(deg).toFixed(4)}° ${dir}`;
 }
-function formatAccelerator(pos: number | undefined): string {
-  if (pos === undefined || pos === null) return "--";
-  return `${Math.round(pos * 100)}%`;
+function formatAccelerator(metadata: SeiMetadataRaw | null | undefined): string {
+  const frac = getDisplayedAccelFraction(metadata);
+  return `${Math.round(frac * 100)}%`;
 }
 function formatTime(frameIndex: number, durations: number[]): string {
   let totalMs = 0;
@@ -253,7 +254,7 @@ export function VideoExportDialog({
     x += ctx.measureText("R").width + 10;
 
     ctx.fillStyle = hudColor;
-    const accelText = `ACCEL ${formatAccelerator(metadata?.acceleratorPedalPosition)}`;
+    const accelText = `ACCEL ${formatAccelerator(metadata)}`;
     ctx.fillText(accelText, x, centerY);
 
     ctx.textAlign = "right";
