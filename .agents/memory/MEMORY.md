@@ -1,1 +1,2 @@
 - [Authentication abuse limits](auth-abuse-limits.md) — successful auth must not clear the shared IP quota that protects sign-in and account creation.
+- [Authentication test isolation](auth-test-isolation.md) — rate-limit tests must separate username and origin dimensions to distinguish account throttles from shared IP quotas.
